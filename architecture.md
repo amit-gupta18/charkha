@@ -1,672 +1,357 @@
-# Agent Memory OS — Architecture
+# Voice Expense Tracker — Architecture
 
-> A persistent, queryable, self-improving memory infrastructure layer that any AI agent can plug into. Agents remember what they did, learn from past runs, and get smarter over time without retraining.
-
----
-
-## Table of Contents
-
-1. [Core Philosophy](#1-core-philosophy)
-2. [Feature Set](#2-feature-set)
-3. [System Architecture](#3-system-architecture)
-4. [Memory Model](#4-memory-model)
-5. [MongoDB Schema Design](#5-mongodb-schema-design)
-6. [MCP Tool Interface](#6-mcp-tool-interface)
-7. [Agent Builder Integration](#7-agent-builder-integration)
-8. [API Reference](#8-api-reference)
-9. [Data Flow Diagrams](#9-data-flow-diagrams)
-10. [Tech Stack](#10-tech-stack)
-11. [Project Structure](#11-project-structure)
-12. [Hackathon Qualification Checklist](#12-hackathon-qualification-checklist)
+Personal finance tracker with voice-first logging, built for a college student with fixed allowance + irregular freelance income.
 
 ---
 
-## 1. Core Philosophy
+## Core Idea
 
-Most AI agents are amnesiac. Every run starts from zero. They can't learn from what worked, can't recall what they already explored, can't build on prior decisions.
-
-Agent Memory OS solves this with three principles:
-
-- **Memory is infrastructure, not an afterthought.** It sits as a layer beneath agents, not bolted on top.
-- **Three memory types, each serving a different purpose.** Episodic (what happened), Semantic (what is known), Procedural (what worked). Mirroring how human memory actually works.
-- **MongoDB as the single source of truth.** Document flexibility for episodic events, vector search for semantic recall, aggregation pipelines for procedural synthesis — no polyglot database sprawl.
+Speak an expense → AI parses it → saved to database → dashboards update automatically.
 
 ---
 
-## 2. Feature Set
-
-### 2.1 Memory Ingestion
-
-- `remember(content, type, context)` — store any content as episodic, semantic, or procedural memory
-- Automatic embedding generation via Voyage AI (MongoDB native) on every semantic write
-- Configurable TTL per memory type (episodic decays, semantic persists, procedural strengthens with use)
-- Agent identity scoping — memories are namespaced per `agent_id`, shareable across agents via shared namespace
-
-### 2.2 Memory Retrieval
-
-- `recall(query, type?, limit?, min_score?)` — vector search over semantic memory, returns ranked results with similarity scores
-- `episode(action?, agent_id?, time_range?)` — filtered retrieval of episodic history
-- `pattern(task_type)` — surface successful procedural patterns from past runs with success rate and step breakdown
-- Hybrid search: combines vector similarity + BM25 keyword match for recall accuracy
-
-### 2.3 Memory Reflection
-
-- `reflect(topic)` — runs a MongoDB aggregation pipeline over episodic + semantic memory to synthesise a structured insight summary
-- Detects contradictions between stored facts and flags them as conflicts
-- Auto-generates "memory summaries" nightly via a scheduled reflection pass, compressing episodic logs into semantic facts
-
-### 2.4 Memory Management
-
-- `forget(memory_id)` — hard delete or soft deprecation (mark as stale, exclude from retrieval but preserve for audit)
-- `decay()` — bulk TTL enforcement, archives episodic memories older than configured threshold
-- `stats(agent_id)` — returns memory usage: total stored, retrieval hit rate, most-recalled memories, knowledge gaps (queries that returned no results)
-
-### 2.5 Demo Agent — Research Intelligence Agent
-
-A reference agent included in the repo that demonstrates all memory types in action:
-
-- **Task:** "Research LLM memory architectures and build a knowledge base"
-- **Run 1:** agent finds nothing in memory, searches web, stores findings as semantic memories, logs the session as episodic
-- **Run 2:** agent recalls prior research, skips what it already knows, builds on existing knowledge
-- **Run 3:** agent reflects, identifies gaps, generates a synthesis report — visibly smarter than Run 1
-
-This makes the memory improvement tangible and demonstrable to judges in a 3-minute video.
-
----
-
-## 3. System Architecture
+## High Level Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        CLIENT AGENTS                                │
-│   (Google Cloud Agent Builder · LangChain · CrewAI · custom)       │
-└────────────────────┬────────────────────────────────────────────────┘
-                     │  MCP protocol calls
-                     ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    AGENT MEMORY OS — MCP SERVER                     │
-│                                                                     │
-│   ┌─────────────┐  ┌──────────────┐  ┌─────────────────────────┐   │
-│   │  remember() │  │   recall()   │  │       reflect()         │   │
-│   │  forget()   │  │   episode()  │  │       pattern()         │   │
-│   │  decay()    │  │   stats()    │  │       (synthesis)       │   │
-│   └──────┬──────┘  └──────┬───────┘  └───────────┬─────────────┘   │
-│          │                │                      │                  │
-│   ┌──────▼────────────────▼──────────────────────▼──────────────┐   │
-│   │              MEMORY ORCHESTRATION LAYER                      │   │
-│   │   - Routes writes/reads to correct memory type               │   │
-│   │   - Handles embedding generation (Voyage AI)                 │   │
-│   │   - Enforces TTL, agent_id scoping, conflict detection       │   │
-│   └──────────────────────────┬───────────────────────────────────┘   │
-└─────────────────────────────┼───────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         MONGODB ATLAS                               │
-│                                                                     │
-│   ┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐  │
-│   │ episodic_memory │  │ semantic_memory  │  │procedural_memory │  │
-│   │                 │  │                  │  │                  │  │
-│   │ - timestamp     │  │ - embedding[]    │  │ - task_type      │  │
-│   │ - agent_id      │  │   (Atlas Vector  │  │ - steps[]        │  │
-│   │ - action        │  │    Search)       │  │ - success_rate   │  │
-│   │ - result        │  │ - content        │  │ - last_used      │  │
-│   │ - context{}     │  │ - source         │  │ - outcomes[]     │  │
-│   │ - ttl           │  │ - confidence     │  │                  │  │
-│   └─────────────────┘  └──────────────────┘  └──────────────────┘  │
-│                                                                     │
-│   ┌──────────────────────────────────────────────────────────────┐  │
-│   │  Atlas Vector Search Index (semantic_memory.embedding)       │  │
-│   │  Voyage AI embeddings · 1024-dim · cosine similarity         │  │
-│   └──────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     GOOGLE CLOUD AGENT BUILDER                      │
-│    Hosts the Research Intelligence Agent demo                       │
-│    Orchestrates multi-step task execution                           │
-│    Calls Agent Memory OS MCP tools at each reasoning step           │
-└─────────────────────────────────────────────────────────────────────┘
+You speak
+    │
+    ▼
+Web Speech API (browser, free)
+    │  captures raw audio → converts to text
+    ▼
+OpenAI API (gpt-4o)
+    │  parses text → structured JSON
+    │  { date, description, category, amount, payment_mode, type, notes }
+    ▼
+Next.js API Route
+    │  validates data → writes to DB
+    ▼
+Supabase (PostgreSQL)
+    │  stores expense
+    ▼
+Dashboard updates automatically
 ```
 
 ---
 
-## 4. Memory Model
+## Feature List
 
-### 4.1 Memory Type Comparison
+### 1. Voice Logger (main feature)
+- Tap mic button → speak expense → confirm → save
+- Example: "Swiggy dinner 249 UPI" →
+  - Description: Swiggy dinner
+  - Amount: ₹249
+  - Payment Mode: UPI
+  - Category: Lifestyle Enjoyment (AI assigned)
+  - Type: Want (auto from category)
+  - Date: today (auto)
+- Confirmation card shown before saving — edit if needed
+- Manual entry fallback if voice fails
 
-| Property          | Episodic                        | Semantic                         | Procedural                        |
-|-------------------|---------------------------------|----------------------------------|-----------------------------------|
-| What it stores    | Events — what happened when     | Facts — what is known            | Patterns — what worked            |
-| Write trigger     | Every agent action               | Agent learns a new fact          | Successful task completion        |
-| Retrieval method  | Filtered query (time, agent)    | Vector similarity search         | Task-type lookup + success rank   |
-| Decay             | Yes — TTL 30 days default       | No — persists until contradicted | Strengthens with successful reuse |
-| MongoDB primitive | Standard document query         | Atlas Vector Search              | Aggregation pipeline              |
-| Human analogy     | "I remember doing that last week"| "I know that Paris is in France" | "I know how to ride a bike"       |
+### 2. Dashboard
+- Monthly income display (₹10k allowance + freelance logged separately)
+- Weekly spend vs weekly limit (progress bar)
+- Need / Want / Saving split for current month
+- Quick stats: today's spend, this week's spend, this month's spend
+- Recent expenses list
 
-### 4.2 Memory Lifecycle
+### 3. Expense Log
+- Full list of all expenses
+- Filter by: category, payment mode, type, date range
+- Edit or delete any entry
+- Search by description
 
+### 4. Weekly View
+- Week by week spend vs limit
+- Ratio indicator (above 100% = overspent)
+- Breakdown by category for each week
+
+### 5. Monthly View
+- Monthly total by category
+- Need / Want / Saving breakdown vs budget
+- Day by day spend for selected month
+- Monthly score (same logic as Warikoo sheet)
+
+### 6. Income Logger
+- Log allowance received (monthly ₹10k from dad)
+- Log freelance/internship income when it comes in
+- Source tagging: Allowance / Freelance / Internship
+
+### 7. Settings
+- Set monthly income base
+- Set weekly spending limit
+- Adjust Need/Want/Saving targets
+
+---
+
+## Data Models
+
+### expenses
 ```
-                    ┌─────────────┐
-                    │   WORKING   │  ← agent's current context window
-                    │   MEMORY    │    (not stored, ephemeral)
-                    └──────┬──────┘
-                           │  agent calls remember()
-              ┌────────────┼────────────────┐
-              ▼            ▼                ▼
-     ┌─────────────┐  ┌─────────┐  ┌───────────────┐
-     │  EPISODIC   │  │SEMANTIC │  │  PROCEDURAL   │
-     │  (what      │  │(what    │  │  (what        │
-     │  happened)  │  │is known)│  │  worked)      │
-     └──────┬──────┘  └────┬────┘  └───────┬───────┘
-            │              │               │
-            │  reflect()   │               │
-            └──────────────┘               │
-                    │ synthesis             │ pattern()
-                    ▼                       ▼
-             semantic memory         procedural memory
-             (compressed facts)      (updated success rate)
-            │
-            │ TTL expires
-            ▼
-         archived / deleted
+id              uuid, primary key
+date            date
+description     text
+category        enum (Life Infrastructure, Future Me,
+                Performance & Growth,
+                Relationships & Generosity,
+                Lifestyle Enjoyment)
+amount          numeric
+payment_mode    enum (UPI, Cash, Credit Card,
+                Debit Card, Bank Transfer)
+type            enum (Need, Want, Saving) — auto from category
+notes           text, nullable
+created_at      timestamp
+```
+
+### income
+```
+id              uuid, primary key
+date            date
+amount          numeric
+source          enum (Allowance, Freelance, Internship)
+notes           text, nullable
+created_at      timestamp
+```
+
+### settings
+```
+id              uuid, primary key
+monthly_income  numeric (default 10000)
+weekly_limit    numeric (default 2500)
+needs_pct       numeric (default 0.50)
+wants_pct       numeric (default 0.30)
+savings_pct     numeric (default 0.20)
 ```
 
 ---
 
-## 5. MongoDB Schema Design
+## Category → Type Mapping (from Warikoo logic)
 
-### 5.1 `episodic_memory` collection
+```
+Life Infrastructure        →  Need
+Performance & Growth       →  Need
+Future Me                  →  Saving
+Relationships & Generosity →  Want
+Lifestyle Enjoyment        →  Want
+```
+
+---
+
+## AI Parsing Logic
+
+OpenAI prompt given raw voice text, returns structured JSON:
 
 ```json
 {
-  "_id": "ObjectId",
-  "agent_id": "string",
-  "session_id": "string",
-  "timestamp": "ISODate",
-  "action": "string",
-  "input": "object",
-  "result": "object",
-  "success": "boolean",
-  "duration_ms": "number",
-  "context": {
-    "task": "string",
-    "step_number": "number",
-    "total_steps": "number",
-    "parent_episode_id": "ObjectId | null"
-  },
-  "tags": ["string"],
-  "ttl_expires_at": "ISODate"
+  "description": "Swiggy dinner",
+  "amount": 249,
+  "payment_mode": "UPI",
+  "category": "Lifestyle Enjoyment",
+  "notes": null
 }
 ```
 
-**Indexes:**
-- `{ agent_id: 1, timestamp: -1 }` — primary retrieval
-- `{ ttl_expires_at: 1 }` — TTL index for automatic expiry
-- `{ session_id: 1 }` — session grouping
+Date defaults to today automatically. If user says "spent yesterday", "bought last Friday", "on Monday" etc — OpenAI parses the relative or explicit date and resolves it to an actual date before saving.
+Type is always derived from category, never parsed from voice.
 
 ---
 
-### 5.2 `semantic_memory` collection
+## Tech Stack
 
-```json
-{
-  "_id": "ObjectId",
-  "agent_id": "string",
-  "content": "string",
-  "source": {
-    "type": "web | tool | agent | human",
-    "url": "string | null",
-    "episode_id": "ObjectId | null"
-  },
-  "embedding": [1024 floats],
-  "confidence": "number (0.0–1.0)",
-  "created_at": "ISODate",
-  "last_recalled_at": "ISODate",
-  "recall_count": "number",
-  "tags": ["string"],
-  "status": "active | stale | conflicted",
-  "conflicts_with": ["ObjectId"]
-}
 ```
+Frontend        Next.js 14 (Typescript) (App Router)
+Backend         Express + Typescript 
+Styling         Tailwind CSS
+Database        Neon DB(PostgreSQL, free tier)
+AI Parsing      OpenAI API (gpt-4o)
+Voice Input     Web Speech API (browser native, free)
+Auth            None (personal use, no login needed)
+Deployment      Vercel (free tier) , Render (render.yaml)
 
-**Indexes:**
-- Atlas Vector Search index on `embedding` field (cosine, 1024-dim)
-- `{ agent_id: 1, status: 1 }` — active memory filter
-- `{ recall_count: -1 }` — surface most-used memories
-
----
-
-### 5.3 `procedural_memory` collection
-
-```json
-{
-  "_id": "ObjectId",
-  "agent_id": "string",
-  "task_type": "string",
-  "description": "string",
-  "steps": [
-    {
-      "order": "number",
-      "action": "string",
-      "tool_call": "string | null",
-      "notes": "string"
-    }
-  ],
-  "success_count": "number",
-  "failure_count": "number",
-  "success_rate": "number (0.0–1.0)",
-  "avg_duration_ms": "number",
-  "last_used_at": "ISODate",
-  "outcomes": [
-    {
-      "session_id": "string",
-      "success": "boolean",
-      "timestamp": "ISODate"
-    }
-  ]
-}
-```
-
-**Indexes:**
-- `{ agent_id: 1, task_type: 1 }` — procedure lookup
-- `{ success_rate: -1 }` — surface best procedures first
-
----
-
-## 6. MCP Tool Interface
-
-The Agent Memory OS exposes 8 tools via the MongoDB MCP Server protocol. Any MCP-compatible agent (Google Agent Builder, Claude, GPT-4o with tools, LangChain) can call these.
-
-### Tool Definitions
-
-```python
-TOOLS = [
-    {
-        "name": "remember",
-        "description": "Store a memory. Specify type: 'episodic' for events, 'semantic' for facts, 'procedural' for task patterns.",
-        "input_schema": {
-            "content": "string — what to remember",
-            "type": "episodic | semantic | procedural",
-            "agent_id": "string",
-            "context": "object (optional) — additional metadata",
-            "tags": "list[string] (optional)"
-        }
-    },
-    {
-        "name": "recall",
-        "description": "Retrieve relevant memories via vector similarity search over semantic memory.",
-        "input_schema": {
-            "query": "string — natural language query",
-            "agent_id": "string",
-            "type": "semantic | episodic | procedural | all",
-            "limit": "int (default 5)",
-            "min_score": "float (default 0.7)"
-        }
-    },
-    {
-        "name": "episode",
-        "description": "Retrieve episodic history filtered by agent, action type, or time range.",
-        "input_schema": {
-            "agent_id": "string",
-            "action_filter": "string (optional)",
-            "since": "ISO timestamp (optional)",
-            "limit": "int (default 20)"
-        }
-    },
-    {
-        "name": "reflect",
-        "description": "Run a synthesis pass over memory for a topic. Returns structured insights, contradictions, and knowledge gaps.",
-        "input_schema": {
-            "topic": "string",
-            "agent_id": "string",
-            "include_episodic": "boolean (default true)",
-            "include_semantic": "boolean (default true)"
-        }
-    },
-    {
-        "name": "pattern",
-        "description": "Retrieve the most successful procedural pattern for a given task type.",
-        "input_schema": {
-            "task_type": "string",
-            "agent_id": "string",
-            "min_success_rate": "float (default 0.6)"
-        }
-    },
-    {
-        "name": "forget",
-        "description": "Deprecate or hard-delete a memory by ID.",
-        "input_schema": {
-            "memory_id": "string",
-            "mode": "soft | hard (default soft)"
-        }
-    },
-    {
-        "name": "decay",
-        "description": "Run TTL enforcement — archive episodic memories past their expiry threshold.",
-        "input_schema": {
-            "agent_id": "string (optional — omit to run across all agents)"
-        }
-    },
-    {
-        "name": "stats",
-        "description": "Return memory usage statistics for an agent: total memories, recall hit rate, most-recalled facts, knowledge gaps.",
-        "input_schema": {
-            "agent_id": "string"
-        }
-    }
-]
 ```
 
 ---
 
-## 7. Agent Builder Integration
-
-The demo Research Intelligence Agent runs entirely on Google Cloud Agent Builder. It uses Agent Memory OS as its sole external tool set via MCP.
-
-### Agent System Prompt
+## Page Structure
 
 ```
-You are a Research Intelligence Agent with persistent memory.
-Before starting any research task, always:
-  1. Call recall() to check what you already know
-  2. Call episode() to review what you already attempted
-  3. Call pattern() to retrieve the best research procedure
-
-After completing research:
-  4. Call remember(type="semantic") for every new fact discovered
-  5. Call remember(type="episodic") to log this session
-  6. Call remember(type="procedural") to update the research pattern with this run's outcome
-
-If asked to synthesise: call reflect() first.
-Never re-research something already in memory unless the user explicitly asks.
-Your goal is to get measurably smarter with every run.
-```
-
-### Multi-Step Task Execution Flow
-
-```
-USER: "Research transformer attention mechanisms and what improvements
-       have been proposed in 2024–2025"
-         │
-         ▼
-STEP 1 ─ recall(query="transformer attention mechanisms", type="semantic")
-         → returns: 3 existing facts about transformers stored from prior run
-         → agent notes: "I already know about scaled dot-product attention"
-         │
-         ▼
-STEP 2 ─ episode(action_filter="web_search", since="2025-01-01")
-         → returns: prior searches logged, including "flash attention paper"
-         → agent notes: "I already searched FlashAttention, skip that"
-         │
-         ▼
-STEP 3 ─ pattern(task_type="research_synthesis")
-         → returns: best procedure from prior runs
-         → agent follows proven steps
-         │
-         ▼
-STEP 4 ─ [agent searches web for NEW gaps identified in steps 1-2]
-         → discovers: "Multi-Head Latent Attention (MLA) in DeepSeek-V2"
-         │
-         ▼
-STEP 5 ─ remember(content="MLA reduces KV cache memory by...", type="semantic")
-         remember(content="Session: found MLA paper, 3 new facts", type="episodic")
-         remember(task_type="research_synthesis", steps=[...], success=True, type="procedural")
-         │
-         ▼
-STEP 6 ─ reflect(topic="transformer attention mechanisms")
-         → synthesises ALL stored knowledge into a structured report
-         → flags any contradictions
-         │
-         ▼
-RESPONSE: Structured research report, grounded in memory, cites what is new vs known
+/                   Dashboard — summary, weekly status, recent expenses
+/log                Voice logger — mic button, confirmation card
+/expenses           Full expense list with filters
+/weekly             Weekly analysis view
+/monthly            Monthly analysis view
+/income             Income logger
+/settings           App settings
 ```
 
 ---
 
-## 8. API Reference
-
-The MCP server also exposes a REST API for direct integration and the dashboard.
+## Voice → Save Flow (detailed)
 
 ```
-POST   /api/memory/remember          Store a memory
-GET    /api/memory/recall             Vector search retrieval
-GET    /api/memory/episode            Episodic history query
-POST   /api/memory/reflect            Trigger reflection synthesis
-GET    /api/memory/pattern            Procedural pattern lookup
-DELETE /api/memory/{id}               Forget a memory
-GET    /api/memory/stats/{agent_id}   Usage statistics
-POST   /api/memory/decay              TTL enforcement run
+1. User taps mic button on /log page
 
-GET    /api/agents                    List registered agents
-POST   /api/agents                    Register new agent
-GET    /api/agents/{id}/dashboard     Dashboard data for UI
-```
+2. Web Speech API starts listening
+   → converts speech to raw text string
 
----
+3. Raw text sent to /api/parse (Next.js API route)
+   → calls OpenAI gpt-4o with system prompt
+   → returns structured JSON
 
-## 9. Data Flow Diagrams
+4. Confirmation card shown to user
+   → description, amount, category, payment mode displayed
+   → user can edit any field before saving
+   → user taps Confirm
 
-### 9.1 Write Flow — `remember(type="semantic")`
+5. POST /api/expenses
+   → validates fields
+   → writes to Supabase expenses table
 
-```
-Agent calls remember()
-        │
-        ▼
-MCP Server receives tool call
-        │
-        ▼
-Memory Orchestration Layer
-  ├─ Validates content, agent_id
-  ├─ Detects memory type → "semantic"
-  ├─ Calls Voyage AI embedding API
-  │    └─ Returns 1024-dim float vector
-  ├─ Checks for conflicts:
-  │    └─ recall(query=content, min_score=0.95)
-  │         ├─ score > 0.95 → potential duplicate → flag conflict
-  │         └─ score < 0.95 → no conflict → proceed
-  └─ Writes document to MongoDB Atlas
-       └─ { content, embedding, source, confidence, ... }
-        │
-        ▼
-Returns: { memory_id, status: "stored" | "conflict_flagged" }
-```
-
-### 9.2 Read Flow — `recall(query)`
-
-```
-Agent calls recall(query="transformer attention")
-        │
-        ▼
-MCP Server receives tool call
-        │
-        ▼
-Memory Orchestration Layer
-  ├─ Generates query embedding via Voyage AI
-  ├─ Runs Atlas Vector Search:
-  │    $vectorSearch: {
-  │      index: "semantic_embedding_index",
-  │      path: "embedding",
-  │      queryVector: [...],
-  │      numCandidates: 50,
-  │      limit: 5,
-  │      filter: { agent_id: "...", status: "active" }
-  │    }
-  ├─ Post-filters by min_score threshold
-  ├─ Updates last_recalled_at + recall_count on matched docs
-  └─ Returns ranked results with similarity scores
-        │
-        ▼
-Returns: [{ content, score, source, confidence, memory_id }, ...]
-```
-
-### 9.3 Reflection Flow — `reflect(topic)`
-
-```
-Agent calls reflect(topic="LLM memory architectures")
-        │
-        ▼
-Memory Orchestration Layer
-  ├─ recall(query=topic) → top 20 semantic memories
-  ├─ episode(action_filter=topic) → related episodic logs
-  │
-  ├─ MongoDB Aggregation Pipeline:
-  │    [
-  │      { $match: { tags: topic, status: "active" } },
-  │      { $group: { _id: "$tags", count: { $sum: 1 },
-  │                  avg_confidence: { $avg: "$confidence" } } },
-  │      { $sort: { count: -1 } }
-  │    ]
-  │
-  ├─ Passes retrieved memories + aggregation result to Gemini 3
-  ├─ Gemini generates: summary, contradictions[], gaps[], confidence
-  └─ Stores synthesis as new high-confidence semantic memory
-        │
-        ▼
-Returns: { summary, contradictions, gaps, source_count, generated_at }
+6. Dashboard refreshes
+   → weekly and monthly totals update automatically
 ```
 
 ---
 
-## 10. Tech Stack
+## Calculated Values (no separate table)
 
-| Layer                   | Technology                                        | Reason                                           |
-|-------------------------|---------------------------------------------------|--------------------------------------------------|
-| Agent Orchestration     | Google Cloud Agent Builder                        | Hackathon requirement · managed hosting          |
-| LLM                     | Gemini 3 (gemini-3-flash / gemini-3-pro)         | Hackathon requirement · multi-step reasoning     |
-| MCP Server              | Python · FastAPI · mcp[server] SDK               | Official MCP protocol implementation            |
-| Primary Database        | MongoDB Atlas (M0 free tier)                      | Document model + vector search + aggregations   |
-| Vector Search           | MongoDB Atlas Vector Search                       | Native to Atlas · no external vector DB needed  |
-| Embeddings              | Voyage AI (voyage-3 · 1024-dim)                  | MongoDB native · strong on technical content    |
-| Backend Framework       | FastAPI + async Motor (MongoDB async driver)      | Non-blocking I/O for concurrent agent calls     |
-| Frontend Dashboard      | Next.js 14 (App Router) + Tailwind CSS           | Fast to build · real-time via SSE               |
-| Real-time Events        | MongoDB Change Streams → Server-Sent Events      | Live memory activity feed in dashboard          |
-| Auth                    | API key per agent_id                              | Simple · sufficient for hackathon scope          |
-| Deployment              | Vercel (frontend) · Google Cloud Run (MCP server)| Free tier · fast deploys                        |
-| Language                | Python 3.12 (backend) · TypeScript (frontend)    | Ecosystem fit                                    |
+All computed on the fly from expenses table:
 
-### What is intentionally NOT used
-
-- **Pinecone / Qdrant / Weaviate** — MongoDB Atlas Vector Search handles this natively. No polyglot DB complexity.
-- **LangChain memory modules** — we ARE the memory layer, not a consumer of one.
-- **Redis for caching** — MongoDB TTL indexes + in-process caching is sufficient at this scale.
-- **Neo4j / graph DB** — memory relationships are modelled as MongoDB document references + aggregation. Keeps the stack focused.
+- Weekly spend: SUM(amount) WHERE date in current week
+- Monthly spend: SUM(amount) WHERE date in current month
+- Need/Want/Saving split: GROUP BY type for current month
+- Weekly ratio: weekly_spend / weekly_limit × 100
+- Category breakdown: GROUP BY category for selected period
 
 ---
 
-## 11. Project Structure
+## Knowledge Base (Finance Persona)
+
+A personal finance wiki built from things you actually watched, read, and learned — not generic advice.
+
+### What it does
+- Save a note from any video, article, podcast, or your own thinking
+- Attach a source URL (YouTube, blog, whatever)
+- Tag by topic
+- Search and refer back anytime
+- Over time it becomes your own finance persona — how you think about money, in your own words
+
+### Data Model
 
 ```
-agent-memory-os/
-│
-├── mcp_server/                    # Core MCP server (Python)
-│   ├── main.py                    # FastAPI app + MCP endpoint
-│   ├── tools/
-│   │   ├── remember.py            # Write tool implementations
-│   │   ├── recall.py              # Vector search retrieval
-│   │   ├── reflect.py             # Reflection + aggregation
-│   │   ├── episode.py             # Episodic history queries
-│   │   ├── pattern.py             # Procedural memory
-│   │   ├── forget.py              # Deprecation + delete
-│   │   └── stats.py               # Usage statistics
-│   ├── db/
-│   │   ├── atlas.py               # MongoDB Atlas connection (Motor)
-│   │   ├── indexes.py             # Index creation + Vector Search setup
-│   │   └── schemas.py             # Pydantic models for all collections
-│   ├── embeddings/
-│   │   └── voyage.py              # Voyage AI embedding client
-│   └── orchestrator.py            # Memory routing + conflict detection
-│
-├── demo_agent/                    # Research Intelligence Agent
-│   ├── agent_builder_config.yaml  # Google Cloud Agent Builder definition
-│   ├── system_prompt.txt          # Full agent system prompt
-│   ├── run_demo.py                # CLI runner for demo scenarios
-│   └── scenarios/
-│       ├── run1_cold_start.py     # First run — no memory
-│       ├── run2_warm.py           # Second run — uses memory
-│       └── run3_reflect.py        # Third run — synthesis
-│
-├── dashboard/                     # Next.js frontend
-│   ├── app/
-│   │   ├── page.tsx               # Memory activity feed
-│   │   ├── memories/page.tsx      # Browse all memories
-│   │   ├── agents/page.tsx        # Per-agent stats
-│   │   └── reflect/page.tsx       # Trigger + view reflections
-│   └── components/
-│       ├── MemoryGraph.tsx        # Force-directed memory graph
-│       ├── RecallScore.tsx        # Similarity score visualiser
-│       └── AgentTimeline.tsx      # Episodic timeline view
-│
-├── scripts/
-│   ├── seed_demo_data.py          # Pre-populate demo memories
-│   ├── setup_atlas_indexes.py     # One-shot Atlas Vector Search setup
-│   └── benchmark_recall.py        # Recall precision benchmarks
-│
-├── tests/
-│   ├── test_remember.py
-│   ├── test_recall.py
-│   └── test_reflect.py
-│
-├── .env.example
-├── docker-compose.yml             # Local dev environment
-├── requirements.txt
-├── README.md
-└── ARCHITECTURE.md                # ← this file
+knowledge_base
+id              uuid, primary key
+title           text (short summary of what you learned)
+source_url      text, nullable (YouTube link, article etc)
+source_type     enum (Video, Article, Podcast, Own Thought)
+topic           enum (Budgeting, SIP, Investing, Insurance,
+                Taxes, Debt, Income, General)
+note            text (your own words — what you learned, why it matters)
+created_at      timestamp
+```
+
+### Page: /knowledge
+
+```
+/knowledge              Full list of notes, searchable by topic or keyword
+/knowledge/new          Add new note — title, source URL, topic, your note
+/knowledge/[id]         View and edit a single note
+```
+
+### Flow
+
+```
+You watch a Warikoo video on SIP
+    │
+    ▼
+Open /knowledge/new
+    │
+    ├── Title: "Start SIP early even with small amount"
+    ├── Source URL: youtube.com/...
+    ├── Source Type: Video
+    ├── Topic: SIP
+    └── Note: "Consistency matters more than amount.
+               Even ₹500/month at 22 compounds significantly by 30.
+               Habit > amount at this stage."
+    │
+    ▼
+Saved to knowledge_base table
+    │
+    ▼
+Searchable anytime — your own finance brain, built over time
 ```
 
 ---
 
-## 12. Hackathon Qualification Checklist
+## MVP Scope (build first)
 
-This section maps Agent Memory OS directly to the Google Cloud Rapid Agent Hackathon's three qualifying criteria.
+- Voice logger with confirmation
+- Dashboard with weekly status
+- Expenses list
+- Income logger
+- Settings
 
-### Requirement 1 — Beyond Chat ✅
+## Later
 
-> "The agent must DO something — manage a database, automate a workflow, or call an API — rather than just providing text responses."
-
-The agent performs real write operations on every run:
-- Writes new memories to MongoDB Atlas (`remember()`)
-- Updates `recall_count` and `last_recalled_at` on retrieved documents
-- Runs aggregation pipelines to synthesise reflections (`reflect()`)
-- Archives expired episodic memories (`decay()`)
-
-This is not retrieval-augmented generation. The database state changes with every agent run.
+- Yearly calendar view
+- Export to CSV
+- Monthly score system
+- Spending insights / AI summary of month
 
 ---
 
-### Requirement 2 — Multi-Step Planning ✅
+## Yearly Expense Graph (GitHub style)
 
-> "The system must demonstrate the ability to take a complex goal, break it into steps, and execute them under user oversight."
+52 columns (weeks) × 7 rows (days) grid covering the full year. Each block = one day.
 
-Every Research Agent task executes a minimum of 6 sequential tool calls with decision branching:
-
+### Color Scale (spend intensity)
 ```
-Step 1  recall()        → check what is already known
-Step 2  episode()       → check what was already attempted
-Step 3  pattern()       → retrieve best procedure for this task type
-Step 4  [web search]    → only research what is genuinely new
-Step 5  remember() ×N   → store each new discovery
-Step 6  reflect()       → synthesise and surface knowledge gaps
+No spend        →  light grey / white
+Light spend     →  light green
+Normal spend    →  green
+High spend      →  orange
+Very high spend →  red
 ```
 
-The agent's Step 4 behaviour changes based on Steps 1–2 output. That is planning, not a pipeline.
+### Hover Tooltip shows
+- Date
+- Total spent that day
+- Breakdown by category
+
+### Page
+Added to /monthly or as its own /calendar view.
 
 ---
 
-### Requirement 3 — MongoDB MCP Integration ✅
+## Coin System (Financial Literacy Score)
 
-> "You must integrate at least one participating partner's Model Context Protocol (MCP) server."
+Tracks whether your financial literacy is keeping pace with your Want spending.
 
-Agent Memory OS **is** the MCP server, built on MongoDB Atlas. Every tool call in the agent's reasoning loop goes through MCP:
-- `remember()` → MongoDB Atlas document write
-- `recall()` → MongoDB Atlas Vector Search
-- `reflect()` → MongoDB Atlas aggregation pipeline
-- `episode()` → MongoDB Atlas filtered query
-- `pattern()` → MongoDB Atlas aggregation + sort
+### Rules
+```
+Spend ₹100 on Wants          →  costs 1 coin
+Log a knowledge base note    →  earn 10 coins
+Complete week under budget   →  earn 50 bonus coins
+```
 
-The MongoDB MCP Server is the entire backbone of the system, not an optional integration.
+Only Want category expenses cost coins.
+Need and Saving expenses do not affect coin balance.
 
----
+### Coin Balance
+```
+Positive balance  →  your learning is outpacing your want spending
+Negative balance  →  you are spending more than you are learning
+```
 
-*Last updated: June 2026*
+### Data Model addition
+```
+coin_transactions
+id              uuid, primary key
+date            date
+amount          integer (positive = earned, negative = spent)
+reason          text (e.g. "Want expense", "Knowledge note logged", "Under budget week")
+reference_id    uuid, nullable (links to expense or knowledge_base row)
+created_at      timestamp
+```
+
+Coin balance = SUM(amount) from coin_transactions.
