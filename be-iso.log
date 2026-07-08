@@ -1,0 +1,7 @@
+
+> backend@1.0.0 dev
+> tsx watch index.ts
+
+◇ injected env (3) from .env // tip: ⌘ suppress logs { quiet: true }
+Backend listening on http://localhost:8011
+^C

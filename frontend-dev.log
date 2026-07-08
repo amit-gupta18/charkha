@@ -1,0 +1,92 @@
+
+> frontend@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.10 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.29.120:3000
+✓ Ready in 1951ms
+
+○ Compiling /settings ...
+ GET /settings 200 in 8.7s (next.js: 7.5s, proxy.ts: 508ms, application-code: 663ms)
+ GET /knowledge 200 in 236ms (next.js: 124ms, proxy.ts: 21ms, application-code: 90ms)
+[browser] Uncaught TypeError: notes.filter is not a function
+    at KnowledgePage.useMemo[filtered] (app/knowledge/page.tsx:26:10)
+    at KnowledgePage (app/knowledge/page.tsx:23:27)
+  24 |     () =>
+  25 |       notes
+> 26 |         .filter((n) => (topic ? n.topic === topic : true))
+     |          ^
+  27 |         .filter((n) => (search ? n.title.toLowerCase().includes(search.toLowerCase()) || n...
+  28 |         .sort((a, b) => (a.createdAt! < b.createdAt! ? 1 : -1)),
+  29 |     [notes, topic, search]
+ GET /knowledge? 200 in 239ms (next.js: 22ms, proxy.ts: 20ms, application-code: 197ms)
+[browser] Uncaught TypeError: notes.filter is not a function
+    at KnowledgePage.useMemo[filtered] (app/knowledge/page.tsx:26:10)
+    at KnowledgePage (app/knowledge/page.tsx:23:27)
+  24 |     () =>
+  25 |       notes
+> 26 |         .filter((n) => (topic ? n.topic === topic : true))
+     |          ^
+  27 |         .filter((n) => (search ? n.title.toLowerCase().includes(search.toLowerCase()) || n...
+  28 |         .sort((a, b) => (a.createdAt! < b.createdAt! ? 1 : -1)),
+  29 |     [notes, topic, search]
+ GET /login 200 in 1005ms (next.js: 460ms, proxy.ts: 160ms, application-code: 385ms)
+✓ Compiled in 1099ms
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ GET /knowledge 200 in 1001ms (next.js: 318ms, proxy.ts: 187ms, application-code: 495ms)
+ GET /knowledge 200 in 300ms (next.js: 139ms, proxy.ts: 69ms, application-code: 92ms)
+ GET /knowledge 200 in 292ms (next.js: 105ms, proxy.ts: 75ms, application-code: 113ms)
+ GET /knowledge 200 in 319ms (next.js: 106ms, proxy.ts: 89ms, application-code: 123ms)
+ GET /knowledge 200 in 261ms (next.js: 114ms, proxy.ts: 69ms, application-code: 78ms)
+ GET /income 200 in 375ms (next.js: 211ms, proxy.ts: 61ms, application-code: 103ms)
+[browser] ⨯ unhandledRejection: TypeError: Failed to fetch
+    at apiFetch (lib/api.ts:14:26)
+    at refreshSession (components/providers/AuthProvider.tsx:32:34)
+    at AuthProvider.useEffect (components/providers/AuthProvider.tsx:53:10)
+  12 |
+  13 | export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+> 14 |   const response = await fetch(`${API_BASE_URL}${path}`, {
+     |                          ^
+  15 |     ...init,
+  16 |     credentials: "include",
+  17 |     headers: {
+○ Compiling /monthly ...
+ GET /monthly 200 in 3.9s (next.js: 3.7s, proxy.ts: 16ms, application-code: 208ms)
+ GET /weekly 200 in 1879ms (next.js: 1768ms, proxy.ts: 18ms, application-code: 93ms)
+ GET /expenses 200 in 273ms (next.js: 169ms, proxy.ts: 16ms, application-code: 88ms)
+ GET /log 200 in 254ms (next.js: 161ms, proxy.ts: 24ms, application-code: 69ms)
+[browser] ⨯ unhandledRejection: TypeError: Failed to fetch
+    at apiFetch (lib/api.ts:14:26)
+    at refreshSession (components/providers/AuthProvider.tsx:32:34)
+    at AuthProvider.useEffect (components/providers/AuthProvider.tsx:53:10)
+  12 |
+  13 | export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+> 14 |   const response = await fetch(`${API_BASE_URL}${path}`, {
+     |                          ^
+  15 |     ...init,
+  16 |     credentials: "include",
+  17 |     headers: {
+[browser] ⨯ unhandledRejection: TypeError: Failed to fetch
+    at apiFetch (lib/api.ts:14:26)
+    at refreshSession (components/providers/AuthProvider.tsx:32:34)
+    at AuthProvider.useEffect (components/providers/AuthProvider.tsx:53:10)
+  12 |
+  13 | export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+> 14 |   const response = await fetch(`${API_BASE_URL}${path}`, {
+     |                          ^
+  15 |     ...init,
+  16 |     credentials: "include",
+  17 |     headers: {
+[browser] ⨯ unhandledRejection: TypeError: Failed to fetch
+    at apiFetch (lib/api.ts:14:26)
+    at refreshSession (components/providers/AuthProvider.tsx:32:34)
+    at AuthProvider.useEffect (components/providers/AuthProvider.tsx:53:10)
+  12 |
+  13 | export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+> 14 |   const response = await fetch(`${API_BASE_URL}${path}`, {
+     |                          ^
+  15 |     ...init,
+  16 |     credentials: "include",
+  17 |     headers: {
+ GET /login 200 in 661ms (next.js: 112ms, proxy.ts: 53ms, application-code: 495ms)
