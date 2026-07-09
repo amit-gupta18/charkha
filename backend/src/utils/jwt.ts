@@ -1,11 +1,22 @@
 import { Response } from "express";
 import jwt from "jsonwebtoken";
 import { env, isProduction } from "../config/env";
+import { isCrossOriginCookies } from "../config/cors";
 
 type AuthTokenPayload = {
   userId: string;
   email: string;
 };
+
+function cookieOptions() {
+  const crossOrigin = isCrossOriginCookies();
+  return {
+    httpOnly: true,
+    sameSite: crossOrigin ? ("none" as const) : ("lax" as const),
+    secure: crossOrigin || isProduction,
+    path: "/",
+  };
+}
 
 export function signAuthToken(payload: AuthTokenPayload) {
   return jwt.sign(payload, env.JWT_SECRET, {
@@ -19,19 +30,11 @@ export function verifyAuthToken(token: string) {
 
 export function setAuthCookie(response: Response, token: string) {
   response.cookie(env.COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: isProduction,
-    path: "/",
+    ...cookieOptions(),
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 }
 
 export function clearAuthCookie(response: Response) {
-  response.clearCookie(env.COOKIE_NAME, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: isProduction,
-    path: "/",
-  });
+  response.clearCookie(env.COOKIE_NAME, cookieOptions());
 }

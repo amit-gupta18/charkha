@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = new Set(["/login", "/signup"]);
+const PUBLIC_PATHS = new Set(["/", "/login", "/signup"]);
 const AUTH_COOKIE_NAME = process.env.NEXT_PUBLIC_AUTH_COOKIE_NAME ?? "accessToken";
 
 export function proxy(request: NextRequest) {
@@ -13,7 +13,7 @@ export function proxy(request: NextRequest) {
   }
 
   if (token && isPublicPath) {
-    const homeUrl = new URL("/", request.url);
+    const homeUrl = new URL("/dashboard", request.url);
     return NextResponse.redirect(homeUrl);
   }
 

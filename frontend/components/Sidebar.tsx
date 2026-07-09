@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 
 const LINKS = [
-  { href: "/",          label: "Dashboard", icon: "⊞" },
+  { href: "/dashboard", label: "Dashboard", icon: "⊞" },
   { href: "/expenses",  label: "Expenses",  icon: "📋" },
   { href: "/weekly",    label: "Weekly",    icon: "📅" },
   { href: "/monthly",   label: "Monthly",   icon: "📈" },
@@ -17,7 +17,7 @@ const LINKS = [
 export function Sidebar() {
   const pathname = usePathname();
 
-  if (pathname === "/login" || pathname === "/signup") return null;
+  if (pathname === "/" || pathname === "/login" || pathname === "/signup") return null;
 
   return (
     <aside className="app-sidebar">
@@ -40,7 +40,7 @@ export function Sidebar() {
       {/* Nav links */}
       <nav style={{ flex: 1, padding: "12px 10px", display: "flex", flexDirection: "column", gap: 2 }}>
         {LINKS.map((link) => {
-          const active = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+          const active = link.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(link.href);
           return (
             <Link
               key={link.href}

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/providers/AuthProvider";
-import { Sidebar } from "@/components/Sidebar";
+import { AppShell } from "@/components/AppShell";
 
 export const metadata: Metadata = {
   title: "Voice Expense Tracker",
@@ -13,12 +13,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en" className="h-full">
       <body className="h-full" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>
         <AuthProvider>
-          <div className="app-shell">
-            <Sidebar />
-            <main className="app-main">
-              {children}
-            </main>
-          </div>
+          <AppShell>{children}</AppShell>
         </AuthProvider>
       </body>
     </html>

@@ -3,6 +3,7 @@ import cors from "cors";
 import express from "express";
 import mongoose from "mongoose";
 import { env } from "./config/env";
+import { corsOptions } from "./config/cors";
 import { requireAuth } from "./middleware/auth";
 import authRoutes from "./routes/auth";
 import settingsRoutes from "./routes/settings";
@@ -16,12 +17,7 @@ import coinRoutes from "./routes/coins";
 export function createApp() {
   const app = express();
 
-  app.use(
-    cors({
-      origin: env.CORS_ORIGIN,
-      credentials: true,
-    }),
-  );
+  app.use(cors(corsOptions()));
   app.use(express.json());
   app.use(cookieParser());
 

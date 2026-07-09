@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { apiFetch } from "@/lib/api";
 import type { AuthResponse } from "@/lib/types";
+import { Alert, FieldLabel } from "@/components/ui/PageShell";
 
 export function LoginForm() {
   const router = useRouter();
@@ -26,7 +27,7 @@ export function LoginForm() {
       });
 
       setUser(data.user);
-      router.replace("/");
+      router.replace("/dashboard");
       router.refresh();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to log in.");
@@ -36,38 +37,31 @@ export function LoginForm() {
   }
 
   return (
-    <form className="space-y-4" onSubmit={handleSubmit}>
-      <label className="block space-y-2 text-sm text-zinc-200">
-        <span>Email</span>
+    <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div>
+        <FieldLabel>Email</FieldLabel>
         <input
-          className="w-full rounded-2xl border border-white/10 bg-zinc-950/70 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+          className="cream-input"
           type="email"
           value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
           required
         />
-      </label>
-
-      <label className="block space-y-2 text-sm text-zinc-200">
-        <span>Password</span>
+      </div>
+      <div>
+        <FieldLabel>Password</FieldLabel>
         <input
-          className="w-full rounded-2xl border border-white/10 bg-zinc-950/70 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+          className="cream-input"
           type="password"
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          onChange={(e) => setPassword(e.target.value)}
           placeholder="Enter your password"
           required
         />
-      </label>
-
-      {error ? <p className="text-sm text-rose-300">{error}</p> : null}
-
-      <button
-        className="w-full rounded-2xl bg-cyan-400 px-4 py-3 font-medium text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-        type="submit"
-        disabled={isSubmitting}
-      >
+      </div>
+      {error ? <Alert type="error">{error}</Alert> : null}
+      <button className="btn-accent" type="submit" disabled={isSubmitting} style={{ width: "100%" }}>
         {isSubmitting ? "Logging in..." : "Log in"}
       </button>
     </form>

@@ -18,7 +18,8 @@ export const env = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
   PORT: Number(process.env.PORT ?? 8000),
   NODE_ENV: process.env.NODE_ENV ?? "development",
-  CORS_ORIGIN: requireEnv("CORS_ORIGIN", "http://localhost:3000"),
+  CORS_ORIGIN: process.env.CORS_ORIGIN ?? "http://localhost:3000",
+  CORS_ALLOW_ALL: process.env.CORS_ORIGIN === "*" || process.env.CORS_ALLOW_ALL === "true",
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN ?? "7d",
   COOKIE_NAME: process.env.COOKIE_NAME ?? "accessToken",
 } as const;
