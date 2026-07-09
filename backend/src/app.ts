@@ -21,7 +21,7 @@ export function createApp() {
   app.use(express.json());
   app.use(cookieParser());
 
-  app.get("/api/health", (_req, res) => {
+  app.get("/health", (_req, res) => {
     const dbConnected = mongoose.connection.readyState === 1;
 
     res.status(dbConnected ? 200 : 503).json({
