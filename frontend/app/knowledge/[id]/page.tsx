@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import { KNOWLEDGE_SOURCE_TYPES, KNOWLEDGE_TOPICS } from "@/lib/constants";
 import type { KnowledgeNote } from "@/lib/types";
+import { Alert, FieldLabel, PageCard, PageLoading, PageShell } from "@/components/ui/PageShell";
+import { CreamSelect } from "@/components/ui/CreamSelect";
 
 export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -13,7 +15,9 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<{ title: string; sourceUrl: string; sourceType: string; topic: string; note: string }>({ title: "", sourceUrl: "", sourceType: KNOWLEDGE_SOURCE_TYPES[0], topic: KNOWLEDGE_TOPICS[0], note: "" });
+  const [form, setForm] = useState<{ title: string; sourceUrl: string; sourceType: string; topic: string; note: string }>({
+    title: "", sourceUrl: "", sourceType: KNOWLEDGE_SOURCE_TYPES[0], topic: KNOWLEDGE_TOPICS[0], note: "",
+  });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -21,7 +25,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
       .then((data) => {
         const n = data.note;
         setNote(n);
-        setForm({ title: n.title, sourceUrl: n.sourceUrl ?? "", sourceType: n.sourceType, topic: n.topic, note: n.note });
+        setForm({ title: n.title, sourceUrl: n.sourceUrl ?? "", sourceType: String(n.sourceType), topic: String(n.topic), note: n.note });
       })
       .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load note."))
       .finally(() => setLoading(false));
@@ -31,11 +35,8 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
     setSaving(true);
     setError(null);
     try {
-      await apiFetch<KnowledgeNote>(`/api/knowledge/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(form),
-      });
-      setNote({ ...note!, ...form });
+      await apiFetch<KnowledgeNote>(`/api/knowledge/${id}`, { method: "PUT", body: JSON.stringify(form) });
+      setNote({ ...note!, title: form.title, sourceUrl: form.sourceUrl, sourceType: form.sourceType, topic: form.topic, note: form.note });
       setEditing(false);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Update failed.");
@@ -54,78 +55,54 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
     }
   }
 
-  if (loading) return <Center>Loading...</Center>;
-  if (error && !note) return <div className="mx-auto max-w-2xl px-6 py-8"><div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div></div>;
+  if (loading) return <PageLoading message="Loading note..." />;
+  if (error && !note) return (
+    <PageShell title="Note not found" subtitle="Knowledge">
+      <Alert type="error">{error}</Alert>
+    </PageShell>
+  );
   if (!note) return null;
 
   return (
-    <main className="px-6 py-8">
-      <div className="mx-auto w-full max-w-2xl space-y-6">
-        <div className="flex items-center justify-between">
-          <button className="text-sm text-cyan-300 hover:text-cyan-200" onClick={() => router.push("/knowledge")}>← Back</button>
-          <div className="flex gap-2">
-            <button className="text-sm text-cyan-300 hover:text-cyan-200" onClick={() => setEditing((v) => !v)}>{editing ? "Cancel" : "Edit"}</button>
-            <button className="text-sm text-red-300 hover:text-red-200" onClick={remove}>Delete</button>
-          </div>
+    <PageShell
+      title={editing ? "Edit Note" : note.title}
+      subtitle="Knowledge"
+      badge={<span className="badge badge-blue">{note.topic}</span>}
+      actions={
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: "0.85rem" }} onClick={() => router.push("/knowledge")}>← Back</button>
+          {!editing && <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: "0.85rem" }} onClick={() => setEditing(true)}>Edit</button>}
+          <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: "0.85rem", color: "var(--red)" }} onClick={remove}>Delete</button>
         </div>
-        {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
-
-        {editing ? (
-          <div className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-6">
-            <label className="block space-y-1"><span className="text-sm text-zinc-300">Title</span>
-              <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            </label>
-            <label className="block space-y-1"><span className="text-sm text-zinc-300">Source URL</span>
-              <input className="input" value={form.sourceUrl} onChange={(e) => setForm({ ...form, sourceUrl: e.target.value })} />
-            </label>
-            <div className="grid grid-cols-2 gap-4">
-              <select className="input" value={form.sourceType} onChange={(e) => setForm({ ...form, sourceType: e.target.value })}>
-                {KNOWLEDGE_SOURCE_TYPES.map((s) => <option key={s}>{s}</option>)}
-              </select>
-              <select className="input" value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value })}>
-                {KNOWLEDGE_TOPICS.map((t) => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-            <textarea className="input" rows={6} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
-            <button className="w-full rounded-2xl bg-cyan-400 px-4 py-3 font-semibold text-zinc-950 hover:bg-cyan-300 disabled:opacity-60" onClick={save} disabled={saving}>
-              {saving ? "Saving..." : "Save"}
-            </button>
-          </div>
-        ) : (
-          <article className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-6">
-            <div className="flex items-center justify-between">
-              <h1 className="text-2xl font-semibold text-white">{note.title}</h1>
-              <span className="rounded-full bg-cyan-400/15 px-2 py-0.5 text-xs text-cyan-200">{note.topic}</span>
-            </div>
-            <p className="whitespace-pre-wrap text-sm text-zinc-200">{note.note}</p>
-            <div className="border-t border-white/10 pt-3 text-xs text-zinc-500">
-              <p>Type: {note.sourceType}</p>
-              {note.sourceUrl && <p><a className="text-cyan-300 hover:underline" href={note.sourceUrl} target="_blank" rel="noreferrer">{note.sourceUrl}</a></p>}
-            </div>
-          </article>
-        )}
-      </div>
-      <GlobalStyle />
-    </main>
-  );
-}
-
-function Center({ children }: { children: React.ReactNode }) {
-  return <main className="flex min-h-screen items-center justify-center px-6 text-sm text-zinc-300">{children}</main>;
-}
-function GlobalStyle() {
-  return (
-    <style jsx global>{`
-      .input {
-        width: 100%;
-        border-radius: 0.75rem;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        background: rgba(255, 255, 255, 0.05);
-        padding: 0.5rem 0.7rem;
-        color: #fff;
-        font-size: 0.85rem;
       }
-      .input:focus { outline: none; border-color: rgba(56, 189, 248, 0.6); }
-    `}</style>
+    >
+      {error && <Alert type="error">{error}</Alert>}
+
+      {editing ? (
+        <PageCard>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div><FieldLabel>Title</FieldLabel><input className="cream-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
+            <div><FieldLabel>Source URL</FieldLabel><input className="cream-input" value={form.sourceUrl} onChange={(e) => setForm({ ...form, sourceUrl: e.target.value })} /></div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <CreamSelect value={form.sourceType} onChange={(sourceType) => setForm({ ...form, sourceType })} options={KNOWLEDGE_SOURCE_TYPES} />
+              <CreamSelect value={form.topic} onChange={(topic) => setForm({ ...form, topic })} options={KNOWLEDGE_TOPICS} />
+            </div>
+            <textarea className="cream-input" rows={6} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={{ resize: "vertical" }} />
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="btn-ghost" onClick={() => setEditing(false)} style={{ flex: "0 0 auto" }}>Cancel</button>
+              <button className="btn-accent" onClick={save} disabled={saving} style={{ flex: 1 }}>{saving ? "Saving..." : "Save changes"}</button>
+            </div>
+          </div>
+        </PageCard>
+      ) : (
+        <PageCard>
+          <p style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>{note.note}</p>
+          <div style={{ borderTop: "1px solid var(--border-light)", marginTop: 16, paddingTop: 12, fontSize: "0.78rem", color: "var(--text-muted)" }}>
+            <p>Type: {note.sourceType}</p>
+            {note.sourceUrl && <p><a href={note.sourceUrl} target="_blank" rel="noreferrer" style={{ color: "var(--accent)", fontWeight: 500 }}>{note.sourceUrl}</a></p>}
+          </div>
+        </PageCard>
+      )}
+    </PageShell>
   );
 }

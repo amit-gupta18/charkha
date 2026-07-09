@@ -5,11 +5,12 @@ const router = Router();
 
 router.get("/", async (request, response, next) => {
   try {
-    const settings = await Settings.findOne({ userId: request.user?.userId }).lean();
+    const userId = request.user?.userId;
+    let settings = await Settings.findOne({ userId }).lean();
 
     if (!settings) {
-      response.status(404).json({ message: "Settings not found." });
-      return;
+      const created = await Settings.create({ userId });
+      settings = created.toObject();
     }
 
     response.json({ settings });
@@ -27,7 +28,7 @@ router.put("/", async (request, response, next) => {
       return;
     }
 
-    const { monthlyIncome, weeklyLimit, needsPct, wantsPct, savingsPct } = request.body ?? {};
+    const { monthlyIncome, weeklyLimit, needsPct, wantsPct, savingsPct, startingBalance } = request.body ?? {};
 
     const update: Record<string, number> = {};
 
@@ -36,6 +37,7 @@ router.put("/", async (request, response, next) => {
     if (typeof needsPct === "number") update.needsPct = needsPct;
     if (typeof wantsPct === "number") update.wantsPct = wantsPct;
     if (typeof savingsPct === "number") update.savingsPct = savingsPct;
+    if (typeof startingBalance === "number") update.startingBalance = startingBalance;
 
     if (Object.keys(update).length === 0) {
       response.status(400).json({ message: "No valid settings fields provided." });

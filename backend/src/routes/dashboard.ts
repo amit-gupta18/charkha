@@ -1,77 +1,91 @@
 import { Router } from "express";
+import { Types } from "mongoose";
 import { Expense } from "../models/Expense";
 import { Income } from "../models/Income";
 import { Settings } from "../models/Settings";
 import { CoinTransaction } from "../models/CoinTransaction";
 import { serializeExpense } from "../models/Expense";
-
-function startOfDayUTC(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-
-function startOfWeekMondayUTC(d: Date): Date {
-  const x = startOfDayUTC(d);
-  const day = x.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  x.setUTCDate(x.getUTCDate() + diff);
-  return x;
-}
+import {
+  addDaysUTC,
+  startOfDayFromDate,
+  startOfMonthFromDate,
+  startOfNextMonthFromDate,
+  startOfWeekMondayFromDate,
+} from "../utils/dates";
 
 const router = Router();
 
 router.get("/", async (request, response, next) => {
   try {
-    const userId = request.user!.userId;
+    const userId = new Types.ObjectId(request.user!.userId);
     const now = new Date();
 
-    // Boundaries are UTC midnight because expense/income dates are stored as UTC midnight.
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-    const todayStart = startOfDayUTC(now);
-    const todayEnd = new Date(todayStart);
-    todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
-
-    const weekStart = startOfWeekMondayUTC(now);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+    const monthStart = startOfMonthFromDate(now);
+    const monthEnd = startOfNextMonthFromDate(now);
+    const todayStart = startOfDayFromDate(now);
+    const todayEnd = addDaysUTC(todayStart, 1);
+    const weekStart = startOfWeekMondayFromDate(now);
+    const weekEnd = addDaysUTC(weekStart, 7);
 
     const settings = (await Settings.findOne({ userId })) ?? null;
     const weeklyLimit = settings?.weeklyLimit ?? 2500;
+    const startingBalance = settings?.startingBalance ?? 0;
 
-    // Evaluate last week's budget bonus
-    const lastWeekStart = new Date(weekStart);
-    lastWeekStart.setUTCDate(lastWeekStart.getUTCDate() - 7);
+    const [totalIncomeAgg, totalExpensesAgg] = await Promise.all([
+      Income.aggregate([{ $match: { userId } }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
+      Expense.aggregate([{ $match: { userId } }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
+    ]);
+    const totalIncome = totalIncomeAgg[0]?.total ?? 0;
+    const totalExpenses = totalExpensesAgg[0]?.total ?? 0;
+    const currentBalance = startingBalance + totalIncome - totalExpenses;
+
+    const lastWeekStart = addDaysUTC(weekStart, -7);
     const { ensureWeeklyUnderBudgetBonus } = await import("../services/coins");
-    await ensureWeeklyUnderBudgetBonus(userId, lastWeekStart.toISOString());
+    await ensureWeeklyUnderBudgetBonus(String(userId), lastWeekStart.toISOString());
 
-    const incomeAgg = await Income.aggregate([
-      { $match: { userId, date: { $gte: monthStart, $lt: monthEnd } } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ]);
+    const [incomeAgg, weeklyIncomeAgg, incomeBySourceAgg, weeklySpendAgg, monthlySpendAgg, todaySpendAgg, typeSplitAgg] =
+      await Promise.all([
+        Income.aggregate([
+          { $match: { userId, date: { $gte: monthStart, $lt: monthEnd } } },
+          { $group: { _id: null, total: { $sum: "$amount" } } },
+        ]),
+        Income.aggregate([
+          { $match: { userId, date: { $gte: weekStart, $lt: weekEnd } } },
+          { $group: { _id: null, total: { $sum: "$amount" } } },
+        ]),
+        Income.aggregate([
+          { $match: { userId, date: { $gte: monthStart, $lt: monthEnd } } },
+          { $group: { _id: "$source", total: { $sum: "$amount" } } },
+        ]),
+        Expense.aggregate([
+          { $match: { userId, date: { $gte: weekStart, $lt: weekEnd } } },
+          { $group: { _id: null, total: { $sum: "$amount" } } },
+        ]),
+        Expense.aggregate([
+          { $match: { userId, date: { $gte: monthStart, $lt: monthEnd } } },
+          { $group: { _id: null, total: { $sum: "$amount" } } },
+        ]),
+        Expense.aggregate([
+          { $match: { userId, date: { $gte: todayStart, $lt: todayEnd } } },
+          { $group: { _id: null, total: { $sum: "$amount" } } },
+        ]),
+        Expense.aggregate([
+          { $match: { userId, date: { $gte: monthStart, $lt: monthEnd } } },
+          { $group: { _id: "$type", total: { $sum: "$amount" } } },
+        ]),
+      ]);
+
     const monthlyIncome = incomeAgg[0]?.total ?? 0;
+    const weeklyIncome = weeklyIncomeAgg[0]?.total ?? 0;
+    const incomeBySource: Record<string, number> = {};
+    for (const row of incomeBySourceAgg) {
+      if (row._id) incomeBySource[row._id as string] = row.total;
+    }
 
-    const weeklySpendAgg = await Expense.aggregate([
-      { $match: { userId, date: { $gte: weekStart, $lt: weekEnd } } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ]);
     const weeklySpend = weeklySpendAgg[0]?.total ?? 0;
-
-    const monthlySpendAgg = await Expense.aggregate([
-      { $match: { userId, date: { $gte: monthStart, $lt: monthEnd } } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ]);
     const monthlySpend = monthlySpendAgg[0]?.total ?? 0;
-
-    const todaySpendAgg = await Expense.aggregate([
-      { $match: { userId, date: { $gte: todayStart, $lt: todayEnd } } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ]);
     const todaySpend = todaySpendAgg[0]?.total ?? 0;
 
-    const typeSplitAgg = await Expense.aggregate([
-      { $match: { userId, date: { $gte: monthStart, $lt: monthEnd } } },
-      { $group: { _id: "$type", total: { $sum: "$amount" } } },
-    ]);
     const typeSplit = { Need: 0, Want: 0, Saving: 0 };
     for (const row of typeSplitAgg) {
       if (row._id in typeSplit) {
@@ -91,6 +105,8 @@ router.get("/", async (request, response, next) => {
 
     response.json({
       monthlyIncome,
+      weeklyIncome,
+      incomeBySource,
       weeklySpend,
       weeklyLimit,
       weeklyRatio,
@@ -99,6 +115,10 @@ router.get("/", async (request, response, next) => {
       typeSplit,
       recentExpenses: recentExpenses.map((e) => serializeExpense(e as any)),
       coinBalance,
+      currentBalance,
+      startingBalance,
+      totalIncome,
+      totalExpenses,
     });
   } catch (error) {
     next(error);

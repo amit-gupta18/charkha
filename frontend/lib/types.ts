@@ -42,6 +42,7 @@ export type Settings = {
   needsPct: number;
   wantsPct: number;
   savingsPct: number;
+  startingBalance: number;
 };
 
 export type KnowledgeNote = {
@@ -69,6 +70,8 @@ export type CoinTransaction = {
 
 export type DashboardData = {
   monthlyIncome: number;
+  weeklyIncome: number;
+  incomeBySource: Record<string, number>;
   weeklySpend: number;
   weeklyLimit: number;
   weeklyRatio: number;
@@ -77,4 +80,8 @@ export type DashboardData = {
   typeSplit: { Need: number; Want: number; Saving: number };
   recentExpenses: Expense[];
   coinBalance: number;
+  currentBalance: number;
+  startingBalance: number;
+  totalIncome: number;
+  totalExpenses: number;
 };

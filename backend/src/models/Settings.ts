@@ -29,6 +29,10 @@ const settingsSchema = new Schema(
       type: Number,
       default: 0.2,
     },
+    startingBalance: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

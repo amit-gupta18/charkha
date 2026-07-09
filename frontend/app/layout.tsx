@@ -1,38 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/providers/AuthProvider";
-import { Nav } from "@/components/Nav";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import { Sidebar } from "@/components/Sidebar";
 
 export const metadata: Metadata = {
   title: "Voice Expense Tracker",
-  description: "Track expenses with voice-first logging.",
+  description: "Track money the way you talk.",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full bg-zinc-950 text-zinc-50 flex flex-col">
+    <html lang="en" className="h-full">
+      <body className="h-full" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>
         <AuthProvider>
-          <Nav />
-          {children}
+          <div className="app-shell">
+            <Sidebar />
+            <main className="app-main">
+              {children}
+            </main>
+          </div>
         </AuthProvider>
       </body>
     </html>

@@ -2,9 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
+import { inr } from "@/lib/format";
 import type { Settings } from "@/lib/types";
+import { Alert, FieldLabel, PageCard, PageLoading, PageShell } from "@/components/ui/PageShell";
 
-const inr = (n: number) => `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+const DEFAULTS: Settings = {
+  monthlyIncome: 10000,
+  weeklyLimit: 2500,
+  needsPct: 0.5,
+  wantsPct: 0.3,
+  savingsPct: 0.2,
+  startingBalance: 0,
+};
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -16,11 +25,11 @@ export default function SettingsPage() {
   useEffect(() => {
     apiFetch<{ settings: Settings }>("/api/settings")
       .then((data) => setSettings(data.settings))
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load settings."))
+      .catch(() => setSettings(DEFAULTS))
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <Center>Loading settings...</Center>;
+  if (loading) return <PageLoading message="Loading settings..." />;
 
   function update(patch: Partial<Settings>) {
     if (settings) setSettings({ ...settings, ...patch });
@@ -38,13 +47,14 @@ export default function SettingsPage() {
     setError(null);
     setSaved(false);
     try {
-      await apiFetch<Settings>("/api/settings", {
+      const res = await apiFetch<{ settings: Settings }>("/api/settings", {
         method: "PUT",
         body: JSON.stringify(settings),
       });
+      setSettings(res.settings);
       setSaved(true);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Failed to save settings (backend may not support PUT yet).");
+      setError(e instanceof ApiError ? e.message : "Failed to save settings.");
     } finally {
       setSaving(false);
     }
@@ -52,54 +62,59 @@ export default function SettingsPage() {
 
   const s = settings!;
   const total = s.needsPct + s.wantsPct + s.savingsPct;
+  const totalOk = Math.abs(total - 1) <= 0.01;
 
   return (
-    <main className="px-6 py-8">
-      <div className="mx-auto w-full max-w-2xl space-y-6">
-        <h1 className="text-2xl font-semibold text-white">Settings</h1>
-        {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
-        {saved && <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">Settings saved.</div>}
+    <PageShell title="Settings" subtitle="Budget & limits">
+      {error && <Alert type="error">{error}</Alert>}
+      {saved && <Alert type="success">Settings saved.</Alert>}
 
-        <div className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-6">
-          <NumField label="Monthly Income (₹)" value={s.monthlyIncome} onChange={(v) => update({ monthlyIncome: v })} />
-          <NumField label="Weekly Limit (₹)" value={s.weeklyLimit} onChange={(v) => update({ weeklyLimit: v })} />
-          <div className="border-t border-white/10 pt-4">
-            <p className="mb-2 text-sm text-zinc-300">Budget split (must total 1.0)</p>
-            <div className="grid grid-cols-3 gap-3">
-              <PctField label="Need %" value={s.needsPct} onChange={(v) => update({ needsPct: v })} />
-              <PctField label="Want %" value={s.wantsPct} onChange={(v) => update({ wantsPct: v })} />
-              <PctField label="Saving %" value={s.savingsPct} onChange={(v) => update({ savingsPct: v })} />
+      <PageCard>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: 20, lineHeight: 1.5 }}>
+          Configure your monthly allowance ({inr(10000)} default from home), weekly spending limit, and Need/Want/Saving budget split per Warikoo framework.
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <NumField label="Starting Balance (₹)" value={s.startingBalance ?? 0} onChange={(v) => update({ startingBalance: v })} hint="Set to your real bank balance when you begin tracking. Current balance = starting + income − expenses." />
+          <NumField label="Monthly Income (₹)" value={s.monthlyIncome} onChange={(v) => update({ monthlyIncome: v })} hint="Base allowance — freelance income logged separately" />
+          <NumField label="Weekly Limit (₹)" value={s.weeklyLimit} onChange={(v) => update({ weeklyLimit: v })} hint="Max spend per week before going over budget" />
+
+          <div style={{ borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
+            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 12 }}>Budget split (must total 1.0)</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+              <PctField label="Need" value={s.needsPct} onChange={(v) => update({ needsPct: v })} />
+              <PctField label="Want" value={s.wantsPct} onChange={(v) => update({ wantsPct: v })} />
+              <PctField label="Saving" value={s.savingsPct} onChange={(v) => update({ savingsPct: v })} />
             </div>
-            <p className={`mt-2 text-xs ${Math.abs(total - 1) > 0.01 ? "text-red-300" : "text-emerald-300"}`}>
-              Total: {total.toFixed(2)}
+            <p style={{ marginTop: 8, fontSize: "0.78rem", color: totalOk ? "var(--green)" : "var(--red)", fontWeight: 600 }}>
+              Total: {total.toFixed(2)} {totalOk ? "✓" : "— must equal 1.00"}
             </p>
           </div>
-          <button className="w-full rounded-2xl bg-cyan-400 px-4 py-3 font-semibold text-zinc-950 hover:bg-cyan-300 disabled:opacity-60"
-            onClick={save} disabled={saving}>
-            {saving ? "Saving..." : "Save Settings"}
+
+          <button className="btn-accent" onClick={save} disabled={saving || !totalOk} style={{ width: "100%" }}>
+            {saving ? "Saving..." : "Save settings"}
           </button>
         </div>
-      </div>
-    </main>
+      </PageCard>
+    </PageShell>
   );
 }
 
-function NumField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function NumField({ label, value, onChange, hint }: { label: string; value: number; onChange: (v: number) => void; hint?: string }) {
   return (
-    <label className="block space-y-1">
-      <span className="text-sm text-zinc-300">{label}</span>
-      <input className="input" type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} />
-    </label>
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <input className="cream-input" type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} />
+      {hint && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>{hint}</p>}
+    </div>
   );
 }
+
 function PctField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   return (
-    <label className="block space-y-1">
-      <span className="text-xs text-zinc-400">{label}</span>
-      <input className="input" type="number" step="0.01" value={value} onChange={(e) => onChange(Number(e.target.value))} />
-    </label>
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <input className="cream-input" type="number" step="0.01" min="0" max="1" value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </div>
   );
-}
-function Center({ children }: { children: React.ReactNode }) {
-  return <main className="flex min-h-screen items-center justify-center px-6 text-sm text-zinc-300">{children}</main>;
 }

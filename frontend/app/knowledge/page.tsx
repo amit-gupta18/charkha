@@ -5,6 +5,8 @@ import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api";
 import { KNOWLEDGE_TOPICS } from "@/lib/constants";
 import type { KnowledgeNote } from "@/lib/types";
+import { Alert, FieldLabel, PageCard, PageLoading, PageShell } from "@/components/ui/PageShell";
+import { CreamSelect } from "@/components/ui/CreamSelect";
 
 export default function KnowledgePage() {
   const [notes, setNotes] = useState<KnowledgeNote[]>([]);
@@ -29,66 +31,52 @@ export default function KnowledgePage() {
     [notes, topic, search]
   );
 
-  if (loading) return <Center>Loading knowledge...</Center>;
+  if (loading) return <PageLoading message="Loading knowledge..." />;
 
   return (
-    <main className="px-6 py-8">
-      <div className="mx-auto w-full max-w-3xl space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <h1 className="text-2xl font-semibold text-white">Knowledge Base</h1>
-          <Link href="/knowledge/new" className="rounded-2xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-cyan-300">+ New Note</Link>
-        </div>
-        {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <input className="input" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
-          <select className="input" value={topic} onChange={(e) => setTopic(e.target.value)}>
-            <option value="">All topics</option>
-            {KNOWLEDGE_TOPICS.map((t) => <option key={t}>{t}</option>)}
-          </select>
-        </div>
-
-        {filtered.length === 0 ? (
-          <p className="text-sm text-zinc-400">No notes found.</p>
-        ) : (
-          <ul className="space-y-3">
-            {filtered.map((n) => (
-              <li key={n.id}>
-                <Link href={`/knowledge/${n.id}`} className="block rounded-3xl border border-white/10 bg-white/5 p-5 transition hover:bg-white/10">
-                  <div className="flex items-center justify-between">
-                    <h2 className="font-semibold text-white">{n.title}</h2>
-                    <span className="rounded-full bg-cyan-400/15 px-2 py-0.5 text-xs text-cyan-200">{n.topic}</span>
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-sm text-zinc-400">{n.note}</p>
-                  <p className="mt-2 text-xs text-zinc-500">{n.sourceType}{n.sourceUrl ? ` · ${n.sourceUrl}` : ""}</p>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <GlobalStyle />
-    </main>
-  );
-}
-
-function Center({ children }: { children: React.ReactNode }) {
-  return <main className="flex min-h-screen items-center justify-center px-6 text-sm text-zinc-300">{children}</main>;
-}
-function GlobalStyle() {
-  return (
-    <style jsx global>{`
-      .input {
-        width: 100%;
-        border-radius: 0.75rem;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        background: rgba(255, 255, 255, 0.05);
-        padding: 0.5rem 0.7rem;
-        color: #fff;
-        font-size: 0.85rem;
+    <PageShell
+      title="Knowledge Base"
+      subtitle="Finance persona / +10 coins per note"
+      actions={
+        <Link href="/knowledge/new" className="btn-accent" style={{ padding: "8px 16px", fontSize: "0.85rem", textDecoration: "none" }}>
+          + New Note
+        </Link>
       }
-      .input:focus { outline: none; border-color: rgba(56, 189, 248, 0.6); }
-      .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    `}</style>
+    >
+      {error && <Alert type="error">{error}</Alert>}
+
+      <PageCard>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: 16, lineHeight: 1.5 }}>
+          Save what you learn about money. Each note earns <strong>10 coins</strong>. Want spending costs coins — keep learning to stay ahead.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div><FieldLabel>Search</FieldLabel><input className="cream-input" placeholder="Search notes..." value={search} onChange={(e) => setSearch(e.target.value)} /></div>
+          <div><FieldLabel>Topic</FieldLabel>
+            <CreamSelect value={topic} onChange={setTopic} placeholder="All topics" options={KNOWLEDGE_TOPICS} />
+          </div>
+        </div>
+      </PageCard>
+
+      {filtered.length === 0 ? (
+        <PageCard><p style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center", padding: "20px 0" }}>No notes found. Add your first learning!</p></PageCard>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {filtered.map((n) => (
+            <Link key={n.id} href={`/knowledge/${n.id}`} style={{ textDecoration: "none" }}>
+              <div className="card animate-fade-up" style={{ padding: "18px 22px", transition: "box-shadow 0.15s", boxShadow: "var(--shadow-sm)" }}
+                onMouseEnter={e => (e.currentTarget.style.boxShadow = "var(--shadow-md)")}
+                onMouseLeave={e => (e.currentTarget.style.boxShadow = "var(--shadow-sm)")}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <h2 style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text-primary)" }}>{n.title}</h2>
+                  <span className="badge badge-blue">{n.topic}</span>
+                </div>
+                <p style={{ marginTop: 6, fontSize: "0.85rem", color: "var(--text-muted)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{n.note}</p>
+                <p style={{ marginTop: 8, fontSize: "0.72rem", color: "var(--text-muted)" }}>{n.sourceType}{n.sourceUrl ? ` · ${n.sourceUrl}` : ""}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </PageShell>
   );
 }

@@ -1,35 +1,671 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
+/* ── Design Tokens ─────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --cream:        #F5EFE0;
+  --parchment:    #EDE6D3;
+  --parchment-dark: #E0D8C0;
+  --surface:      #FDFAF5;
+  --card:         #FFFFFF;
+  --border:       #E2D9C5;
+  --border-light: #EDE6D3;
+  --text-primary: #1A1612;
+  --text-secondary:#4A3F35;
+  --text-muted:   #8C7D6E;
+  --accent:       #C8622A;
+  --accent-light: #F0874A;
+  --green:        #3A9E6B;
+  --green-light:  #D4F0E3;
+  --orange:       #D4793A;
+  --orange-light: #FDE9D4;
+  --blue:         #4A7FC1;
+  --blue-light:   #D6E8F5;
+  --red:          #C0392B;
+  --red-light:    #FDDBD8;
+  --coin:         #D4A017;
+  --coin-light:   #FFF3CD;
+
+  --sidebar-w: 220px;
+  --shadow-sm: 0 1px 3px rgba(90,70,50,0.08);
+  --shadow-md: 0 4px 12px rgba(90,70,50,0.10);
+  --shadow-lg: 0 8px 24px rgba(90,70,50,0.12);
+  --radius-card: 14px;
+  --radius-sm: 8px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ── Base ───────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+html { scroll-behavior: smooth; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--surface);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
 }
 
-* {
-  box-sizing: border-box;
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; }
+
+/* ── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--parchment); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ── Animations ─────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+@keyframes flashGreen {
+  0%   { box-shadow: 0 0 0 0 rgba(58,158,107,0.45); }
+  50%  { box-shadow: 0 0 0 8px rgba(58,158,107,0.15); }
+  100% { box-shadow: 0 0 0 0 rgba(58,158,107,0); }
+}
+
+@keyframes countUp {
+  from { opacity: 0.3; transform: translateY(6px); }
+  to   { opacity: 1;   transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-mic {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(200,98,42,0.5); }
+  50%       { box-shadow: 0 0 0 12px rgba(200,98,42,0); }
+}
+
+@keyframes barFill {
+  from { width: 0%; }
+}
+
+.animate-fade-up   { animation: fadeUp 0.4s ease both; }
+.animate-count-up  { animation: countUp 0.5s ease both; }
+.animate-flash     { animation: flashGreen 0.8s ease; }
+.animate-slide-in  { animation: slideIn 0.3s ease both; }
+.animate-bar       { animation: barFill 0.8s cubic-bezier(0.4,0,0.2,1) both; }
+
+/* ── App Layout ─────────────────────────────────────────── */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-sidebar {
+  width: var(--sidebar-w);
+  min-height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  background: var(--cream);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+}
+
+.app-main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  background: var(--surface);
+  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+/* ── Section nav (dashboard) ─────────────────────────────── */
+.section-nav {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding: 4px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+.section-nav a {
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s;
+}
+.section-nav a:hover {
+  background: var(--parchment);
+  color: var(--text-primary);
+}
+
+/* ── Data table ──────────────────────────────────────────── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.data-table th {
+  text-align: left;
+  padding: 10px 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+}
+.data-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-secondary);
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table td.amount { text-align: right; font-weight: 700; color: var(--text-primary); }
+.data-table td.actions { text-align: right; white-space: nowrap; }
+
+/* ── Heatmap cells ───────────────────────────────────────── */
+.heatmap-cell {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  cursor: default;
+}
+.heatmap-none   { background: var(--parchment); }
+.heatmap-light  { background: #B8E6CF; }
+.heatmap-normal { background: var(--green); }
+.heatmap-high   { background: var(--orange); }
+.heatmap-very   { background: var(--red); }
+
+/* ── Cards ──────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-cream {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+
+/* ── Form inputs (cream theme) ───────────────────────────── */
+.cream-input {
+  width: 100%;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.9rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: inherit;
+  transition: border-color 0.15s;
+  outline: none;
+}
+.cream-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(200,98,42,0.12);
+}
+.cream-input::placeholder { color: var(--text-muted); }
+
+/* ── Custom select & date picker ──────────────────────────── */
+.cream-select {
+  position: relative;
+  width: 100%;
+}
+
+.cream-select-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.9rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: inherit;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.cream-select-trigger:hover:not(:disabled) {
+  border-color: var(--parchment-dark);
+}
+
+.cream-select.is-open .cream-select-trigger,
+.cream-select-trigger:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(200,98,42,0.12);
+  outline: none;
+}
+
+.cream-select-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.cream-select-placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.cream-select-chevron {
+  flex-shrink: 0;
+  color: var(--accent);
+  transition: transform 0.2s;
+}
+
+.cream-select.is-open .cream-select-chevron {
+  transform: rotate(180deg);
+}
+
+.cream-select-menu {
+  position: absolute;
+  z-index: 200;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.cream-select-option {
+  padding: 0.55rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.cream-select-option:hover {
+  background: var(--parchment);
+  color: var(--text-primary);
+}
+
+.cream-select-option.is-selected {
+  background: var(--parchment);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Custom date picker panel ─────────────────────────────── */
+.cream-date-panel {
+  position: absolute;
+  z-index: 200;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 280px;
+  padding: 14px;
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg);
+}
+
+.cream-date-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.cream-date-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.cream-date-nav {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.cream-date-nav:hover {
+  background: var(--parchment);
+  border-color: var(--parchment-dark);
+  color: var(--text-primary);
+}
+
+.cream-date-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.cream-date-weekdays span {
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 0;
+}
+
+.cream-date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.cream-date-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 0.82rem;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.cream-date-cell.empty {
+  cursor: default;
+  pointer-events: none;
+}
+
+.cream-date-cell:not(.empty):hover {
+  background: var(--parchment);
+  color: var(--text-primary);
+}
+
+.cream-date-cell.is-today {
+  border: 1.5px solid var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.cream-date-cell.is-selected {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.cream-date-cell.is-selected.is-today {
+  border-color: var(--accent);
+}
+
+.cream-date-today {
+  width: 100%;
+  margin-top: 10px;
+  padding: 0.5rem;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.cream-date-today:hover {
+  background: var(--parchment);
+  color: var(--text-primary);
+}
+
+/* ── Legacy native select (fallback) ──────────────────────── */
+select.cream-input {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 2.4rem;
+  cursor: pointer;
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23C8622A' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 14px;
+}
+
+select.cream-input:hover {
+  border-color: var(--parchment-dark);
+  background-color: var(--surface);
+}
+
+select.cream-input:focus {
+  background-color: var(--surface);
+}
+
+select.cream-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+select.cream-input option {
+  background: var(--card);
+  color: var(--text-primary);
+  padding: 8px;
+}
+
+select.cream-input optgroup {
+  background: var(--cream);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* ── Date & month pickers ─────────────────────────────────── */
+input[type="date"].cream-input,
+input[type="month"].cream-input,
+input[type="time"].cream-input,
+input[type="datetime-local"].cream-input {
+  color-scheme: light;
+  cursor: pointer;
+  min-height: 2.5rem;
+  padding-right: 2.4rem;
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23C8622A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 16px;
+}
+
+input[type="date"].cream-input:hover,
+input[type="month"].cream-input:hover,
+input[type="time"].cream-input:hover,
+input[type="datetime-local"].cream-input:hover {
+  border-color: var(--parchment-dark);
+}
+
+input[type="date"].cream-input:focus,
+input[type="month"].cream-input:focus,
+input[type="time"].cream-input:focus,
+input[type="datetime-local"].cream-input:focus {
+  background-color: var(--surface);
+}
+
+/* Hide native icon; keep click target over custom icon */
+input[type="date"].cream-input::-webkit-calendar-picker-indicator,
+input[type="month"].cream-input::-webkit-calendar-picker-indicator,
+input[type="time"].cream-input::-webkit-calendar-picker-indicator,
+input[type="datetime-local"].cream-input::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  width: 2.5rem;
+  height: 100%;
+  cursor: pointer;
+}
+
+input[type="date"].cream-input::-webkit-datetime-edit,
+input[type="month"].cream-input::-webkit-datetime-edit,
+input[type="time"].cream-input::-webkit-datetime-edit,
+input[type="datetime-local"].cream-input::-webkit-datetime-edit {
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+input[type="date"].cream-input::-webkit-datetime-edit-fields-wrapper,
+input[type="month"].cream-input::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+}
+
+input[type="date"].cream-input::-webkit-datetime-edit-text,
+input[type="month"].cream-input::-webkit-datetime-edit-text {
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+
+input[type="date"].cream-input::-webkit-datetime-edit-month-field,
+input[type="date"].cream-input::-webkit-datetime-edit-day-field,
+input[type="date"].cream-input::-webkit-datetime-edit-year-field,
+input[type="month"].cream-input::-webkit-datetime-edit-month-field,
+input[type="month"].cream-input::-webkit-datetime-edit-year-field {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Firefox date inputs */
+input[type="date"].cream-input,
+input[type="month"].cream-input {
+  position: relative;
+}
+
+/* ── Number inputs ────────────────────────────────────────── */
+input[type="number"].cream-input {
+  -moz-appearance: textfield;
+}
+
+input[type="number"].cream-input::-webkit-outer-spin-button,
+input[type="number"].cream-input::-webkit-inner-spin-button {
+  opacity: 0.5;
+  height: 1.4rem;
+}
+
+input[type="number"].cream-input:hover::-webkit-outer-spin-button,
+input[type="number"].cream-input:hover::-webkit-inner-spin-button {
+  opacity: 0.85;
+}
+
+/* ── Textarea ─────────────────────────────────────────────── */
+textarea.cream-input {
+  resize: vertical;
+  min-height: 5rem;
+  line-height: 1.5;
+}
+
+/* ── Buttons ────────────────────────────────────────────── */
+.btn-accent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 1.4rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn-accent:hover  { background: var(--accent-light); }
+.btn-accent:active { transform: scale(0.98); }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 1.2rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-ghost:hover { background: var(--parchment); border-color: var(--parchment-dark); }
+
+/* ── Progress bars ──────────────────────────────────────── */
+.progress-track {
+  height: 10px;
+  width: 100%;
+  background: var(--parchment);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.8s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* ── Badge pills ────────────────────────────────────────── */
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 99px; font-size: 0.75rem; font-weight: 600; }
+.badge-green  { background: var(--green-light);  color: var(--green);  }
+.badge-orange { background: var(--orange-light); color: var(--orange); }
+.badge-red    { background: var(--red-light);    color: var(--red);    }
+.badge-blue   { background: var(--blue-light);   color: var(--blue);   }
+.badge-coin   { background: var(--coin-light);   color: var(--coin);   }
+
+/* ── Mic button ─────────────────────────────────────────── */
+.mic-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  transition: background 0.15s, transform 0.1s;
+}
+.mic-btn:hover   { background: var(--accent-light); }
+.mic-btn.active  { animation: pulse-mic 1.2s infinite; background: var(--red); }
+.mic-btn:active  { transform: scale(0.95); }
+
+/* ── Mobile hide sidebar ────────────────────────────────── */
+@media (max-width: 768px) {
+  .app-sidebar { display: none; }
+  .app-main    { margin-left: 0; }
 }

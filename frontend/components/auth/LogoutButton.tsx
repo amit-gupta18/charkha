@@ -25,12 +25,30 @@ export function LogoutButton() {
 
   return (
     <button
-      className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+      style={{
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        padding: "8px 12px",
+        borderRadius: 9,
+        background: "transparent",
+        border: "1.5px solid var(--border)",
+        color: "var(--text-muted)",
+        fontSize: "0.8rem",
+        fontWeight: 500,
+        cursor: "pointer",
+        fontFamily: "inherit",
+        transition: "background 0.15s",
+      }}
       type="button"
       onClick={handleLogout}
       disabled={isSubmitting}
+      onMouseEnter={e => (e.currentTarget.style.background = "var(--parchment)")}
+      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
     >
-      {isSubmitting ? "Signing out..." : "Log out"}
+      <span>↩</span>{isSubmitting ? "Signing out..." : "Log out"}
     </button>
   );
 }

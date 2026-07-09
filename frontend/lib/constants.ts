@@ -1,53 +1,41 @@
 export const CATEGORIES = [
-  "Food",
-  "Transport",
-  "Shopping",
-  "Bills",
-  "Entertainment",
-  "Health",
-  "Education",
-  "Travel",
-  "Groceries",
-  "Other",
+  "Life Infrastructure",
+  "Performance & Growth",
+  "Future Me",
+  "Relationships & Generosity",
+  "Lifestyle Enjoyment",
 ] as const;
 
 export const PAYMENT_MODES = [
   "UPI",
   "Cash",
-  "Card",
-  "Net Banking",
-  "Wallet",
+  "Credit Card",
+  "Debit Card",
+  "Bank Transfer",
 ] as const;
 
-export const INCOME_SOURCES = [
-  "Salary",
-  "Freelance",
-  "Business",
-  "Investment",
-  "Gift",
-  "Refund",
-  "Other",
-] as const;
+export const INCOME_SOURCES = ["Allowance", "Freelance", "Internship"] as const;
 
 export const KNOWLEDGE_SOURCE_TYPES = [
-  "Article",
   "Video",
-  "Book",
+  "Article",
   "Podcast",
-  "Course",
-  "Documentation",
-  "Tweet",
-  "Other",
+  "Own Thought",
 ] as const;
 
 export const KNOWLEDGE_TOPICS = [
   "Budgeting",
+  "SIP",
   "Investing",
-  "Saving",
+  "Insurance",
   "Taxes",
   "Debt",
-  "Frugality",
-  "Mindset",
-  "Tools",
-  "Other",
+  "Income",
+  "General",
 ] as const;
+
+export type Category = (typeof CATEGORIES)[number];
+export type PaymentMode = (typeof PAYMENT_MODES)[number];
+export type IncomeSource = (typeof INCOME_SOURCES)[number];
+export type KnowledgeSourceType = (typeof KNOWLEDGE_SOURCE_TYPES)[number];
+export type KnowledgeTopic = (typeof KNOWLEDGE_TOPICS)[number];
