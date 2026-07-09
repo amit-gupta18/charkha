@@ -1,7 +1,0 @@
-
-> backend@1.0.0 dev
-> tsx watch index.ts
-
-◇ injected env (4) from .env // tip: ⌘ override existing { override: true }
-Backend listening on http://localhost:8000
-^C

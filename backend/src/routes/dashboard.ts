@@ -38,6 +38,12 @@ router.get("/", async (request, response, next) => {
     const settings = (await Settings.findOne({ userId })) ?? null;
     const weeklyLimit = settings?.weeklyLimit ?? 2500;
 
+    // Evaluate last week's budget bonus
+    const lastWeekStart = new Date(weekStart);
+    lastWeekStart.setUTCDate(lastWeekStart.getUTCDate() - 7);
+    const { ensureWeeklyUnderBudgetBonus } = await import("../services/coins");
+    await ensureWeeklyUnderBudgetBonus(userId, lastWeekStart.toISOString());
+
     const incomeAgg = await Income.aggregate([
       { $match: { userId, date: { $gte: monthStart, $lt: monthEnd } } },
       { $group: { _id: null, total: { $sum: "$amount" } } },

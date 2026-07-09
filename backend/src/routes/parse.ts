@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { parseExpenseText } from "../services/openai";
+import { parseFinancialText } from "../services/openai";
 import { isNonEmptyString } from "../utils/validators";
 
 const router = Router();
@@ -13,16 +13,9 @@ router.post("/", async (request, response, next) => {
       return;
     }
 
-    const parsed = await parseExpenseText(text);
+    const parsed = await parseFinancialText(text);
 
-    response.json({
-      description: parsed.description,
-      amount: parsed.amount,
-      payment_mode: parsed.payment_mode,
-      category: parsed.category,
-      notes: parsed.notes,
-      date: parsed.date,
-    });
+    response.json(parsed);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to parse expense.";
     response.status(502).json({ message });
