@@ -13,8 +13,12 @@ const splitMemberSchema = new Schema(
     expenseId: {
       type: Schema.Types.ObjectId,
       ref: "Expense",
-      required: true,
-      index: true,
+      default: null,
+    },
+    splitBillId: {
+      type: Schema.Types.ObjectId,
+      ref: "SplitBill",
+      default: null,
     },
     flatmateId: {
       type: Schema.Types.ObjectId,
@@ -34,6 +38,11 @@ const splitMemberSchema = new Schema(
       type: String,
       enum: SPLIT_STATUSES,
       default: "pending",
+    },
+    entryType: {
+      type: String,
+      enum: ["receivable", "payable"],
+      default: "receivable",
     },
   },
   {
@@ -55,12 +64,14 @@ export function serializeSplitMember(doc: SplitMemberDocument) {
   return {
     id: String(doc._id),
     userId: String(doc.userId),
-    expenseId: String(doc.expenseId),
+    expenseId: doc.expenseId ? String(doc.expenseId) : null,
+    splitBillId: doc.splitBillId ? String(doc.splitBillId) : null,
     flatmateId: String(doc.flatmateId),
     amountOwed: doc.amountOwed,
     amountSettled: doc.amountSettled,
     amountPending,
     status: doc.status as (typeof SPLIT_STATUSES)[number],
+    entryType: (doc.entryType ?? "receivable") as "receivable" | "payable",
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };

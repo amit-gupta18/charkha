@@ -34,6 +34,11 @@ const splitSettlementSchema = new Schema(
       type: Date,
       required: true,
     },
+    direction: {
+      type: String,
+      enum: ["received", "paid"],
+      default: "received",
+    },
     allocations: {
       type: [allocationSchema],
       default: [],
@@ -61,6 +66,7 @@ export function serializeSplitSettlement(doc: SplitSettlementDocument) {
     amount: doc.amount,
     reason: doc.reason,
     date: doc.date,
+    direction: (doc.direction ?? "received") as "received" | "paid",
     allocations: doc.allocations.map((a) => ({
       splitMemberId: String(a.splitMemberId),
       amountApplied: a.amountApplied,

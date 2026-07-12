@@ -1,6 +1,7 @@
 import { Types, HydratedDocument } from "mongoose";
 import { Expense, ExpenseDocument } from "../models/Expense";
 import { Flatmate } from "../models/Flatmate";
+import { SplitBill, serializeSplitBill } from "../models/SplitBill";
 import { SplitMember, serializeSplitMember } from "../models/SplitMember";
 import { SplitSettlement, serializeSplitSettlement } from "../models/SplitSettlement";
 
@@ -50,12 +51,22 @@ export function matchFlatmateNames(
   return { matched, unmatched };
 }
 
+function validateShares(total: number, memberShares: number[]) {
+  const flatmateSum = round2(memberShares.reduce((s, v) => s + v, 0));
+  if (flatmateSum <= 0 || flatmateSum > total) {
+    throw new Error("Invalid split shares.");
+  }
+  const userShare = round2(total - flatmateSum);
+  if (userShare < 0) throw new Error("Flatmate shares exceed total amount.");
+  return { userShare, flatmateSum };
+}
+
 export async function createSplitMembers(
   userId: string,
   expense: HydratedDocument<ExpenseDocument>,
   flatmateIds: string[],
   shares?: number[],
-): Promise<ReturnType<typeof serializeSplitMember>[]> {
+) {
   const total = expense.amount;
   const ids = flatmateIds.map((id) => new Types.ObjectId(id));
 
@@ -69,15 +80,17 @@ export async function createSplitMembers(
     memberShares = computeEqualShares(total, ids.length);
   }
 
-  const flatmateSum = round2(memberShares.reduce((s, v) => s + v, 0));
-  if (flatmateSum <= 0 || flatmateSum > total) {
-    throw new Error("Invalid split shares.");
-  }
+  const { userShare } = validateShares(total, memberShares);
 
-  const userShare = round2(total - flatmateSum);
-  if (userShare < 0) {
-    throw new Error("Flatmate shares exceed total amount.");
-  }
+  const bill = await SplitBill.create({
+    userId,
+    date: expense.date,
+    description: expense.description,
+    totalAmount: total,
+    userShare,
+    paidBy: "user",
+    expenseId: expense._id,
+  });
 
   expense.isSplit = true;
   expense.userShare = userShare;
@@ -87,23 +100,126 @@ export async function createSplitMembers(
     ids.map((flatmateId, i) => ({
       userId,
       expenseId: expense._id,
+      splitBillId: bill._id,
       flatmateId,
       amountOwed: memberShares![i],
       amountSettled: 0,
       status: "pending",
+      entryType: "receivable",
     })),
   );
 
-  return created.map((m) => serializeSplitMember(m as any));
+  return {
+    bill: serializeSplitBill(bill),
+    members: created.map((m) => serializeSplitMember(m as any)),
+  };
 }
 
-export async function getFlatmatePendingTotal(userId: string, flatmateId: string): Promise<number> {
+/** Roommate paid — plate only, no expense debit. */
+export async function createSplitBillTheyPaid(
+  userId: string,
+  params: {
+    date: Date;
+    description: string;
+    totalAmount: number;
+    paidByFlatmateId: string;
+    flatmateIds: string[];
+    shares?: number[];
+  },
+) {
+  const { date, description, totalAmount, paidByFlatmateId, flatmateIds, shares } = params;
+
+  const payer = await Flatmate.findOne({ userId, _id: paidByFlatmateId });
+  if (!payer) throw new Error("Paying flatmate not found.");
+
+  const ids = flatmateIds.map((id) => new Types.ObjectId(id));
+  const flatmates = await Flatmate.find({ userId, _id: { $in: ids } }).lean();
+  if (flatmates.length !== ids.length) {
+    throw new Error("One or more flatmates not found.");
+  }
+
+  let memberShares = shares?.map(round2);
+  if (!memberShares || memberShares.length !== ids.length) {
+    memberShares = computeEqualShares(totalAmount, ids.length);
+  }
+
+  const { userShare } = validateShares(totalAmount, memberShares);
+
+  const bill = await SplitBill.create({
+    userId,
+    date,
+    description,
+    totalAmount,
+    userShare,
+    paidBy: paidByFlatmateId,
+    expenseId: null,
+  });
+
+  const created = await SplitMember.create({
+    userId,
+    expenseId: null,
+    splitBillId: bill._id,
+    flatmateId: paidByFlatmateId,
+    amountOwed: userShare,
+    amountSettled: 0,
+    status: "pending",
+    entryType: "payable",
+  });
+
+  return {
+    bill: serializeSplitBill(bill),
+    members: [serializeSplitMember(created as any)],
+  };
+}
+
+export async function getPlateBalances(userId: string) {
+  const members = await SplitMember.find({ userId, status: "pending" }).lean();
+  const flatmates = await Flatmate.find({ userId }).lean();
+  const nameMap = new Map(flatmates.map((f) => [String(f._id), f.name]));
+
+  const byFlatmate = new Map<string, { receivable: number; payable: number }>();
+
+  for (const m of members) {
+    const fid = String(m.flatmateId);
+    const cur = byFlatmate.get(fid) ?? { receivable: 0, payable: 0 };
+    const pending = round2(m.amountOwed - m.amountSettled);
+    if (pending <= 0) continue;
+    if (m.entryType === "payable") {
+      cur.payable += pending;
+    } else {
+      cur.receivable += pending;
+    }
+    byFlatmate.set(fid, cur);
+  }
+
+  const perFlatmate = flatmates.map((f) => {
+    const id = String(f._id);
+    const { receivable, payable } = byFlatmate.get(id) ?? { receivable: 0, payable: 0 };
+    const net = round2(receivable - payable);
+    return {
+      flatmateId: id,
+      name: f.name,
+      theyOweYou: round2(receivable),
+      youOweThem: round2(payable),
+      netBalance: net,
+    };
+  });
+
+  const totalReceivable = round2(perFlatmate.reduce((s, r) => s + r.theyOweYou, 0));
+  const totalPayable = round2(perFlatmate.reduce((s, r) => s + r.youOweThem, 0));
+  const netTotal = round2(totalReceivable - totalPayable);
+
+  return { perFlatmate, totalReceivable, totalPayable, netTotal };
+}
+
+export async function getFlatmatePendingTotal(userId: string, flatmateId: string, entryType: "receivable" | "payable" = "receivable"): Promise<number> {
   const result = await SplitMember.aggregate([
     {
       $match: {
         userId: new Types.ObjectId(userId),
         flatmateId: new Types.ObjectId(flatmateId),
         status: "pending",
+        entryType,
       },
     },
     {
@@ -122,18 +238,22 @@ export async function applySettlement(
   amount: number,
   reason: string,
   date: Date,
+  direction: "received" | "paid" = "received",
 ) {
   if (amount <= 0) throw new Error("Amount must be positive.");
 
-  const pendingTotal = await getFlatmatePendingTotal(userId, flatmateId);
+  const entryType = direction === "received" ? "receivable" : "payable";
+  const pendingTotal = await getFlatmatePendingTotal(userId, flatmateId, entryType);
   if (amount > pendingTotal + 0.001) {
-    throw new Error(`Cannot clear more than pending (₹${pendingTotal}).`);
+    const label = direction === "received" ? "they owe you" : "you owe them";
+    throw new Error(`Cannot clear more than pending (₹${pendingTotal} ${label}).`);
   }
 
   const members = await SplitMember.find({
     userId,
     flatmateId,
     status: "pending",
+    entryType,
   })
     .sort({ createdAt: 1 })
     .exec();
@@ -164,6 +284,7 @@ export async function applySettlement(
     amount,
     reason,
     date,
+    direction,
     allocations,
   });
 
@@ -195,12 +316,14 @@ export async function settleMemberRemaining(userId: string, memberId: string) {
     return serializeSplitMember(member as any);
   }
 
+  const direction = member.entryType === "payable" ? "paid" : "received";
   return applySettlement(
     userId,
     String(member.flatmateId),
     pending,
     "Full settle",
     new Date(),
+    direction,
   );
 }
 
@@ -212,13 +335,7 @@ export async function deleteSplitMembersForExpense(userId: string, expenseId: st
     }
   }
   await SplitMember.deleteMany({ userId, expenseId });
+  await SplitBill.deleteMany({ userId, expenseId });
 }
 
-export async function expenseHasSettlements(userId: string, expenseId: string): Promise<boolean> {
-  const count = await SplitMember.countDocuments({
-    userId,
-    expenseId,
-    amountSettled: { $gt: 0 },
-  });
-  return count > 0;
-}
+export { round2 };

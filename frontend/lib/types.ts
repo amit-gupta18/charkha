@@ -78,18 +78,39 @@ export type Flatmate = {
 
 export type SplitMember = {
   id: string;
-  expenseId: string;
+  expenseId: string | null;
+  splitBillId: string | null;
   flatmateId: string;
   amountOwed: number;
   amountSettled: number;
   amountPending: number;
   status: "pending" | "settled";
+  entryType: "receivable" | "payable";
   flatmate?: Flatmate | null;
 };
 
-export type SplitExpense = {
-  expense: Expense;
+export type SplitBill = {
+  id: string;
+  date: string;
+  description: string;
+  totalAmount: number;
+  userShare: number;
+  paidBy: string;
+  expenseId: string | null;
+};
+
+export type SplitRecord = {
+  bill: SplitBill;
   members: SplitMember[];
+  expense: Expense | null;
+};
+
+export type PlateBalance = {
+  flatmateId: string;
+  name: string;
+  theyOweYou: number;
+  youOweThem: number;
+  netBalance: number;
 };
 
 export type SplitSettlement = {
@@ -99,6 +120,7 @@ export type SplitSettlement = {
   amount: number;
   reason: string;
   date: string;
+  direction: "received" | "paid";
 };
 
 export type Lending = {
@@ -114,6 +136,9 @@ export type SplitsSummaryItem = {
   flatmateId: string;
   name: string;
   pendingTotal: number;
+  theyOweYou?: number;
+  youOweThem?: number;
+  netBalance?: number;
 };
 
 export type DashboardData = {
@@ -133,5 +158,6 @@ export type DashboardData = {
   totalIncome: number;
   totalExpenses: number;
   splitsSummary: SplitsSummaryItem[];
+  splitsNetTotal?: number;
   lendingSummary: { totalPending: number };
 };

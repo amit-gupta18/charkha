@@ -4,9 +4,8 @@ import { Expense } from "../models/Expense";
 import { Income } from "../models/Income";
 import { Settings } from "../models/Settings";
 import { CoinTransaction } from "../models/CoinTransaction";
-import { Flatmate } from "../models/Flatmate";
 import { Lending } from "../models/Lending";
-import { SplitMember } from "../models/SplitMember";
+import { getPlateBalances } from "../services/splits";
 import { serializeExpense } from "../models/Expense";
 import {
   addDaysUTC,
@@ -48,7 +47,7 @@ router.get("/", async (request, response, next) => {
     const { ensureWeeklyUnderBudgetBonus } = await import("../services/coins");
     await ensureWeeklyUnderBudgetBonus(String(userId), lastWeekStart.toISOString());
 
-    const [incomeAgg, weeklyIncomeAgg, incomeBySourceAgg, weeklySpendAgg, monthlySpendAgg, todaySpendAgg, typeSplitAgg, splitsSummaryAgg, lendingSummaryAgg] =
+    const [incomeAgg, weeklyIncomeAgg, incomeBySourceAgg, weeklySpendAgg, monthlySpendAgg, todaySpendAgg, typeSplitAgg, lendingSummaryAgg] =
       await Promise.all([
         Income.aggregate([
           { $match: { userId, date: { $gte: monthStart, $lt: monthEnd } } },
@@ -77,16 +76,6 @@ router.get("/", async (request, response, next) => {
         Expense.aggregate([
           { $match: { userId, date: { $gte: monthStart, $lt: monthEnd } } },
           { $group: { _id: "$type", total: spendSum } },
-        ]),
-        SplitMember.aggregate([
-          { $match: { userId, status: "pending" } },
-          {
-            $project: {
-              flatmateId: 1,
-              pending: { $subtract: ["$amountOwed", "$amountSettled"] },
-            },
-          },
-          { $group: { _id: "$flatmateId", pendingTotal: { $sum: "$pending" } } },
         ]),
         Lending.aggregate([
           { $match: { userId, status: "pending" } },
@@ -122,14 +111,18 @@ router.get("/", async (request, response, next) => {
 
     const weeklyRatio = weeklyLimit > 0 ? (weeklySpend / weeklyLimit) * 100 : 0;
 
-    const flatmates = await Flatmate.find({ userId }).lean();
-    const flatmateNameMap = new Map(flatmates.map((f) => [String(f._id), f.name]));
+    const plate = await getPlateBalances(String(userId));
 
-    const splitsSummary = splitsSummaryAgg.map((row) => ({
-      flatmateId: String(row._id),
-      name: flatmateNameMap.get(String(row._id)) ?? "Unknown",
-      pendingTotal: Math.round((row.pendingTotal ?? 0) * 100) / 100,
-    }));
+    const splitsSummary = plate.perFlatmate
+      .filter((p) => p.netBalance !== 0 || p.theyOweYou !== 0 || p.youOweThem !== 0)
+      .map((p) => ({
+        flatmateId: p.flatmateId,
+        name: p.name,
+        pendingTotal: p.netBalance,
+        theyOweYou: p.theyOweYou,
+        youOweThem: p.youOweThem,
+        netBalance: p.netBalance,
+      }));
 
     const lendingSummary = { totalPending: lendingSummaryAgg[0]?.totalPending ?? 0 };
 
@@ -150,6 +143,7 @@ router.get("/", async (request, response, next) => {
       totalIncome,
       totalExpenses,
       splitsSummary,
+      splitsNetTotal: plate.netTotal,
       lendingSummary,
     });
   } catch (error) {

@@ -97,12 +97,13 @@ router.post("/", async (request, response, next) => {
     let splitMembers;
     if (split && Array.isArray(split.flatmateIds) && split.flatmateIds.length > 0) {
       try {
-        splitMembers = await createSplitMembers(
+        const result = await createSplitMembers(
           userId,
           expense,
           split.flatmateIds,
           Array.isArray(split.shares) ? split.shares : undefined,
         );
+        splitMembers = result.members;
       } catch (err) {
         await Expense.findByIdAndDelete(expense._id);
         const message = err instanceof Error ? err.message : "Failed to create split.";

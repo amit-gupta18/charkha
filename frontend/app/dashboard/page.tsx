@@ -404,7 +404,7 @@ export default function Home() {
           setSaving(false);
           return;
         }
-        await apiFetch("/api/splits/settlements", { method: "POST", body: JSON.stringify({ flatmateId: clearForm.flatmateId, amount: Number(clearForm.amount), reason: clearForm.reason, date: clearForm.date || today() }) });
+        await apiFetch("/api/splits/settlements", { method: "POST", body: JSON.stringify({ flatmateId: clearForm.flatmateId, amount: Number(clearForm.amount), reason: clearForm.reason, date: clearForm.date || today(), direction: "received" }) });
         setSuccessMsg(`✓ Split clear saved — ${inr(Number(clearForm.amount))}`);
       }
       setIntentData(null); setAgentText(""); appStateRef.current = "IDLE";
@@ -606,16 +606,21 @@ export default function Home() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
           <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "var(--radius-card)", padding: "18px 22px", boxShadow: "var(--shadow-sm)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Splits owed to you</p>
+              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Split plate</p>
               <a href="#splits" style={{ fontSize: "0.78rem", color: "var(--accent)", fontWeight: 600 }}>View →</a>
             </div>
+            <p style={{ fontSize: "1.5rem", fontWeight: 800, color: (d.splitsNetTotal ?? 0) >= 0 ? "var(--green)" : "var(--orange)", margin: "0 0 8px" }}>
+              {(d.splitsNetTotal ?? 0) >= 0 ? "+" : ""}{inr(d.splitsNetTotal ?? 0)}
+            </p>
             {(d.splitsSummary ?? []).length === 0 ? (
-              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>No pending splits</p>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Plate is settled</p>
             ) : (
               (d.splitsSummary ?? []).map(s => (
-                <div key={s.flatmateId} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "0.88rem" }}>
+                <div key={s.flatmateId} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: "0.82rem" }}>
                   <span>{s.name}</span>
-                  <span style={{ fontWeight: 700 }}>{inr(s.pendingTotal)}</span>
+                  <span style={{ fontWeight: 700, color: (s.netBalance ?? s.pendingTotal) >= 0 ? "var(--green)" : "var(--orange)" }}>
+                    {(s.netBalance ?? s.pendingTotal) >= 0 ? "+" : ""}{inr(s.netBalance ?? s.pendingTotal)}
+                  </span>
                 </div>
               ))
             )}
