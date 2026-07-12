@@ -2,7 +2,7 @@ import { Router } from "express";
 import { env } from "../config/env";
 import { Settings } from "../models/Settings";
 import { User } from "../models/User";
-import { clearAuthCookie, setAuthCookie, signAuthToken, verifyAuthToken } from "../utils/jwt";
+import { clearAuthCookie, refreshAuthSession, setAuthCookie, signAuthToken, verifyAuthToken } from "../utils/jwt";
 import { comparePassword, hashPassword } from "../utils/passwords";
 
 const router = Router();
@@ -123,6 +123,11 @@ router.get("/me", async (request, response, next) => {
       response.status(401).json({ message: "Unauthorized" });
       return;
     }
+
+    refreshAuthSession(response, {
+      userId: String(user._id),
+      email: user.email,
+    });
 
     response.json({ user: serializeUser(user) });
   } catch {

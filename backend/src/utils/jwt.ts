@@ -31,10 +31,17 @@ export function verifyAuthToken(token: string) {
 export function setAuthCookie(response: Response, token: string) {
   response.cookie(env.COOKIE_NAME, token, {
     ...cookieOptions(),
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge: env.AUTH_COOKIE_MAX_AGE_MS,
   });
 }
 
 export function clearAuthCookie(response: Response) {
   response.clearCookie(env.COOKIE_NAME, cookieOptions());
+}
+
+/** Re-issue JWT + cookie so active users stay logged in (sliding session). */
+export function refreshAuthSession(response: Response, payload: AuthTokenPayload) {
+  const token = signAuthToken(payload);
+  setAuthCookie(response, token);
+  return token;
 }

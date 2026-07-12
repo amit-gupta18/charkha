@@ -17,5 +17,5 @@ export function corsOptions(): CorsOptions {
 }
 
 export function isCrossOriginCookies() {
-  return env.CORS_ALLOW_ALL || env.NODE_ENV === "production";
+  return env.COOKIE_CROSS_SITE;
 }

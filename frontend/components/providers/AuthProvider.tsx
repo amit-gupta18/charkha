@@ -27,31 +27,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  async function refreshSession() {
-    try {
-      const data = await apiFetch<AuthResponse>("/api/auth/me");
-      setUser(data.user);
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
-        setUser(null);
-        if (!PUBLIC_ROUTES.has(pathname)) {
-          startTransition(() => {
-            router.replace("/login");
-          });
-        }
-        return;
-      }
+  useEffect(() => {
+    let cancelled = false;
 
-      throw error;
-    } finally {
-      setIsLoading(false);
+    async function refreshSession() {
+      try {
+        const data = await apiFetch<AuthResponse>("/api/auth/me");
+        if (!cancelled) {
+          setUser(data.user);
+        }
+      } catch (error) {
+        if (cancelled) return;
+
+        if (error instanceof ApiError && error.status === 401) {
+          setUser(null);
+          return;
+        }
+
+        throw error;
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
     }
-  }
+
+    void refreshSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
-    setIsLoading(true);
-    void refreshSession();
-  }, [pathname]);
+    if (isLoading || user || PUBLIC_ROUTES.has(pathname)) {
+      return;
+    }
+
+    startTransition(() => {
+      router.replace("/login");
+    });
+  }, [isLoading, user, pathname, router]);
 
   return <AuthContext.Provider value={{ user, isLoading, setUser }}>{children}</AuthContext.Provider>;
 }

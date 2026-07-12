@@ -1,20 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { CATEGORIES, PAYMENT_MODES, INCOME_SOURCES } from "@/lib/constants";
-import { inr, today, expenseShare } from "@/lib/format";
-import type { DashboardData, Flatmate } from "@/lib/types";
+import { dateKey, inr, isoWeekKey, today, expenseShare } from "@/lib/format";
+import type { DashboardData, Expense, Flatmate, Settings } from "@/lib/types";
 import { PageLoading } from "@/components/ui/PageShell";
 import { CreamSelect } from "@/components/ui/CreamSelect";
 import { CreamDatePicker } from "@/components/ui/CreamDatePicker";
-import { ExpensesSection } from "@/components/dashboard/ExpensesSection";
-import { WeeklySection } from "@/components/dashboard/WeeklySection";
-import { MonthlySection } from "@/components/dashboard/MonthlySection";
-import { IncomeSection } from "@/components/dashboard/IncomeSection";
-import { SplitsSection } from "@/components/dashboard/SplitsSection";
-import { LendingSection } from "@/components/dashboard/LendingSection";
+import { BentoCard, BarChart, DonutChart, PieChart, StatTile } from "@/components/dashboard/DashboardCharts";
+import { DashboardHeatmap } from "@/components/dashboard/DashboardHeatmap";
 
 type ParsedExpense = { date: string | null; description: string | null; category: string | null; amount: number | null; paymentMode: string | null; notes?: string | null };
 type ParsedSplitExpense = ParsedExpense & { matchedFlatmates?: Flatmate[]; unmatchedFlatmates?: string[] };
@@ -28,15 +24,6 @@ type ParsedIntent =
   | { intent: "lending"; data: ParsedLending }
   | { intent: "split_clear"; data: ParsedSplitClear };
 
-const SECTIONS = [
-  { id: "overview", label: "Overview" },
-  { id: "income", label: "Income" },
-  { id: "expenses", label: "Expenses" },
-  { id: "splits", label: "Splits" },
-  { id: "lending", label: "Lending" },
-  { id: "weekly", label: "Weekly" },
-  { id: "monthly", label: "Monthly" },
-];
 
 function round2(n: number) { return Math.round(n * 100) / 100; }
 
@@ -53,17 +40,7 @@ function BalanceCard({ balance, startingBalance, totalIncome, totalExpenses, fla
 }) {
   const low = balance < 1000;
   return (
-    <div
-      className={flash ? "animate-flash" : ""}
-      style={{
-        background: "linear-gradient(135deg, var(--cream) 0%, var(--card) 100%)",
-        border: "1.5px solid var(--border)",
-        borderRadius: "var(--radius-card)",
-        padding: "24px 28px",
-        marginBottom: 24,
-        boxShadow: "var(--shadow-md)",
-      }}
-    >
+    <div className={`bento-balance${flash ? " animate-flash" : ""}`}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
         <div>
           <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
@@ -99,31 +76,6 @@ function BalanceCard({ balance, startingBalance, totalIncome, totalExpenses, fla
         <div style={{ marginLeft: "auto" }}>
           <a href="/settings" style={{ fontSize: "0.78rem", color: "var(--accent)", fontWeight: 600 }}>Adjust baseline →</a>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value, sub, flash }: { label: string; value: string; sub?: string; flash?: boolean }) {
-  return (
-    <div className={flash ? "animate-flash" : ""} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "var(--radius-card)", padding: "18px 20px", boxShadow: "var(--shadow-sm)" }}>
-      <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</p>
-      <p className={flash ? "animate-count-up" : ""} style={{ fontSize: "1.7rem", fontWeight: 700, color: "var(--text-primary)", margin: "4px 0 2px" }}>{value}</p>
-      {sub && <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{sub}</p>}
-    </div>
-  );
-}
-
-function SplitBar({ label, amount, total, color }: { label: string; amount: number; total: number; color: string }) {
-  const pct = total > 0 ? Math.min(100, (amount / total) * 100) : 0;
-  return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-        <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: 500 }}>{label}</span>
-        <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-primary)" }}>{inr(amount)}</span>
-      </div>
-      <div className="progress-track">
-        <div className="progress-fill animate-bar" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
   );
@@ -296,6 +248,8 @@ export default function Home() {
   const [splitShares, setSplitShares] = useState<Record<string, string>>({});
   const [unmatchedFlatmates, setUnmatchedFlatmates] = useState<string[]>([]);
   const [flatmates, setFlatmates] = useState<Flatmate[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [settings, setSettings] = useState<Settings | null>(null);
 
   const fetchDashboard = useCallback(() => {
     apiFetch<DashboardData>("/api/dashboard")
@@ -304,17 +258,89 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, []);
 
+  const fetchChartData = useCallback(() => {
+    Promise.all([
+      apiFetch<{ expenses: Expense[] }>("/api/expenses"),
+      apiFetch<{ settings: Settings }>("/api/settings").catch(() => null),
+    ])
+      .then(([exp, set]) => {
+        setExpenses(exp.expenses);
+        setSettings(set?.settings ?? null);
+      })
+      .catch(() => {});
+  }, []);
+
   const refreshAll = useCallback(() => {
     fetchDashboard();
+    fetchChartData();
     setRefreshKey(k => k + 1);
-  }, [fetchDashboard]);
+  }, [fetchDashboard, fetchChartData]);
 
   useEffect(() => {
     if (!authLoading) {
       fetchDashboard();
+      fetchChartData();
       apiFetch<{ flatmates: Flatmate[] }>("/api/flatmates").then(r => setFlatmates(r.flatmates)).catch(() => {});
     }
-  }, [authLoading, fetchDashboard]);
+  }, [authLoading, fetchDashboard, fetchChartData, refreshKey]);
+
+  const currentMonthKey = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }, []);
+
+  const weeklyLimit = settings?.weeklyLimit ?? data?.weeklyLimit ?? 2500;
+
+  const categorySegments = useMemo(() => {
+    const monthExpenses = expenses.filter((e) => dateKey(e.date).slice(0, 7) === currentMonthKey);
+    const totals = new Map<string, number>();
+    for (const e of monthExpenses) {
+      totals.set(e.category, (totals.get(e.category) ?? 0) + expenseShare(e));
+    }
+    return Array.from(totals.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, value]) => ({ label, value }));
+  }, [expenses, currentMonthKey]);
+
+  const weeklyBars = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of expenses) {
+      const k = isoWeekKey(e.date);
+      map.set(k, (map.get(k) ?? 0) + expenseShare(e));
+    }
+    const currentKey = isoWeekKey(today());
+    return Array.from(map.entries())
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .slice(0, 8)
+      .reverse()
+      .map(([key, value]) => ({
+        label: key.split("-W")[1] ? `W${key.split("-W")[1]}` : key,
+        value,
+        highlight: key === currentKey,
+      }));
+  }, [expenses]);
+
+  const monthBars = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of expenses) {
+      const k = dateKey(e.date).slice(0, 7);
+      map.set(k, (map.get(k) ?? 0) + expenseShare(e));
+    }
+    const now = new Date();
+    const items = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      items.push({
+        label: d.toLocaleDateString("en-IN", { month: "short" }),
+        value: map.get(k) ?? 0,
+        highlight: k === currentMonthKey,
+      });
+    }
+    return items;
+  }, [expenses, currentMonthKey]);
+
+  const dayThreshold = weeklyLimit / 7 || 1;
 
   const fillExpenseForm = (p: ParsedExpense) => {
     setExpenseForm({
@@ -462,17 +488,22 @@ export default function Home() {
 
   const d = data!;
   const weeklyPct = d?.weeklyLimit > 0 ? Math.min(100, (d.weeklySpend / d.weeklyLimit) * 100) : 0;
-  const weeklyOver = d ? d.weeklySpend > d.weeklyLimit : false;
-  const monthlyTotal = d ? d.typeSplit.Need + d.typeSplit.Want + d.typeSplit.Saving : 0;
+  const weeklyOver = d.weeklySpend > d.weeklyLimit;
   const coinPositive = d.coinBalance >= 0;
 
-  return (
-    <div style={{ padding: "28px 32px", maxWidth: 960, margin: "0 auto" }}>
+  const weeklyRemaining = Math.max(0, d.weeklyLimit - d.weeklySpend);
+  const recentThree = d.recentExpenses.slice(0, 3);
+  const typeSegments = [
+    { label: "Need", value: d.typeSplit.Need, color: "var(--blue)" },
+    { label: "Want", value: d.typeSplit.Want, color: "var(--orange)" },
+    { label: "Saving", value: d.typeSplit.Saving, color: "var(--green)" },
+  ];
 
-      {/* Header */}
+  return (
+    <div className="dashboard-page">
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
         <div>
-          <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em" }}>Dashboard / Voice-first expense tracker</p>
+          <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em" }}>Dashboard</p>
           <h1 style={{ fontSize: "1.6rem", fontWeight: 700, color: "var(--text-primary)", margin: "4px 0 0" }}>
             Welcome back, {user.name.split(" ")[0]} 👋
           </h1>
@@ -482,209 +513,119 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Balance card */}
-      <BalanceCard
-        balance={d.currentBalance ?? 0}
-        startingBalance={d.startingBalance ?? 0}
-        totalIncome={d.totalIncome ?? 0}
-        totalExpenses={d.totalExpenses ?? 0}
-        flash={flashStats}
-      />
-
-      {/* Section nav */}
-      <nav className="section-nav">
-        {SECTIONS.map(s => (
-          <a key={s.id} href={`#${s.id}`}>{s.label}</a>
-        ))}
-      </nav>
-
-      {/* Voice logger */}
-      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "var(--radius-card)", padding: "16px 20px", marginBottom: 28, boxShadow: "var(--shadow-md)" }}>
-        <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-          🤖 Log an expense or income
-        </p>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button className={`mic-btn${listening ? " active" : ""}`} onClick={toggleMic} title={listening ? "Stop" : "Speak"}>🎤</button>
-          <input className="cream-input" value={interim || agentText} onChange={e => setAgentText(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && agentText.trim()) sendForParse(agentText); }}
-            placeholder={listening ? "Listening..." : "Try: 'Wifi 430 split with Rahul UPI' or 'Lent Rahul 500 for dinner'"}
-            style={{ flex: 1 }} />
-          <button className="btn-accent" onClick={() => sendForParse(agentText)} disabled={parsing || !agentText.trim()} style={{ flexShrink: 0, padding: "10px 18px" }}>
-            {parsing ? "..." : "Parse"}
-          </button>
-        </div>
-        {agentError && <p style={{ marginTop: 8, fontSize: "0.8rem", color: "var(--red)" }}>{agentError}</p>}
-        {successMsg && <p style={{ marginTop: 8, fontSize: "0.8rem", color: "var(--green)", fontWeight: 600 }}>{successMsg}</p>}
-        <ConfirmCard
-          intent={intentData?.intent ?? null}
-          expenseForm={expenseForm}
-          incomeForm={incomeForm}
-          lendingForm={lendingForm}
-          clearForm={clearForm}
-          splitFlatmateIds={splitFlatmateIds}
-          splitShares={splitShares}
-          flatmates={flatmates}
-          unmatchedFlatmates={unmatchedFlatmates}
-          onConfirm={confirmSave}
-          onCancel={cancelConfirm}
-          saving={saving}
-          setExpenseForm={setExpenseForm}
-          setIncomeForm={setIncomeForm}
-          setLendingForm={setLendingForm}
-          setClearForm={setClearForm}
-          setSplitFlatmateIds={setSplitFlatmateIds}
-          setSplitShares={setSplitShares}
-        />
-      </div>
-
-      <div id="overview">
-        {/* Monthly & weekly income */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
-          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "var(--radius-card)", padding: "18px 22px", boxShadow: "var(--shadow-sm)" }}>
-            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Combined monthly income</p>
-            <p className={flashStats ? "animate-count-up" : ""} style={{ fontSize: "2rem", fontWeight: 800, color: "var(--text-primary)", margin: "4px 0" }}>{inr(d.monthlyIncome ?? 0)}</p>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
-              {Object.entries(d.incomeBySource ?? {}).length === 0 ? (
-                <span className="badge badge-green">No income logged this month</span>
-              ) : (
-                Object.entries(d.incomeBySource ?? {}).map(([src, amt]) => (
-                  <span key={src} className="badge badge-green">{src}: {inr(amt)}</span>
-                ))
-              )}
-            </div>
-          </div>
-          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "var(--radius-card)", padding: "18px 22px", boxShadow: "var(--shadow-sm)" }}>
-            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Combined weekly income</p>
-            <p className={flashStats ? "animate-count-up" : ""} style={{ fontSize: "2rem", fontWeight: 800, color: "var(--green)", margin: "4px 0" }}>{inr(d.weeklyIncome ?? 0)}</p>
-            <span className="badge badge-blue">This week (Mon–Sun)</span>
-          </div>
+      <div className="dashboard-bento">
+        <div className="bento-span-4">
+          <BalanceCard
+            balance={d.currentBalance ?? 0}
+            startingBalance={d.startingBalance ?? 0}
+            totalIncome={d.totalIncome ?? 0}
+            totalExpenses={d.totalExpenses ?? 0}
+            flash={flashStats}
+          />
         </div>
 
-        {/* Weekly budget */}
-        <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "var(--radius-card)", padding: "18px 22px", marginBottom: 20, boxShadow: "var(--shadow-sm)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <div>
-              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Weekly spend vs. limit</p>
-              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: 2 }}>Keep the beast under control.</p>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <p className={flashStats ? "animate-count-up" : ""} style={{ fontSize: "2rem", fontWeight: 800, color: weeklyOver ? "var(--red)" : "var(--text-primary)" }}>{Math.round(weeklyPct)}%</p>
-              <span className={`badge ${weeklyOver ? "badge-red" : "badge-green"}`}>{weeklyOver ? "Over budget" : "Under budget"}</span>
-            </div>
+        <div className="bento-span-4 bento-voice">
+          <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            🤖 Voice logger
+          </p>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <button className={`mic-btn${listening ? " active" : ""}`} onClick={toggleMic} title={listening ? "Stop" : "Speak"}>🎤</button>
+            <input
+              className="cream-input"
+              value={interim || agentText}
+              onChange={e => setAgentText(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && agentText.trim()) sendForParse(agentText); }}
+              placeholder={listening ? "Listening..." : "Try: 'Wifi 430 split with Rahul UPI' or 'Lent Rahul 500 for dinner'"}
+              style={{ flex: 1 }}
+            />
+            <button className="btn-accent" onClick={() => sendForParse(agentText)} disabled={parsing || !agentText.trim()} style={{ flexShrink: 0, padding: "10px 18px" }}>
+              {parsing ? "..." : "Parse"}
+            </button>
           </div>
-          <div className="progress-track" style={{ height: 12 }}>
-            <div className="progress-fill" style={{ width: `${weeklyPct}%`, background: weeklyOver ? "var(--red)" : "var(--green)" }} />
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Spent {inr(d.weeklySpend)}</span>
-            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Limit {inr(d.weeklyLimit)}</span>
-          </div>
+          {agentError && <p style={{ marginTop: 8, fontSize: "0.8rem", color: "var(--red)" }}>{agentError}</p>}
+          {successMsg && <p style={{ marginTop: 8, fontSize: "0.8rem", color: "var(--green)", fontWeight: 600 }}>{successMsg}</p>}
+          <ConfirmCard
+            intent={intentData?.intent ?? null}
+            expenseForm={expenseForm}
+            incomeForm={incomeForm}
+            lendingForm={lendingForm}
+            clearForm={clearForm}
+            splitFlatmateIds={splitFlatmateIds}
+            splitShares={splitShares}
+            flatmates={flatmates}
+            unmatchedFlatmates={unmatchedFlatmates}
+            onConfirm={confirmSave}
+            onCancel={cancelConfirm}
+            saving={saving}
+            setExpenseForm={setExpenseForm}
+            setIncomeForm={setIncomeForm}
+            setLendingForm={setLendingForm}
+            setClearForm={setClearForm}
+            setSplitFlatmateIds={setSplitFlatmateIds}
+            setSplitShares={setSplitShares}
+          />
         </div>
 
-        {/* Need / Want / Saving */}
-        <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "var(--radius-card)", padding: "18px 22px", marginBottom: 20, boxShadow: "var(--shadow-sm)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-            <div>
-              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Need / Want / Saving</p>
-              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: 2 }}>This month split (Warikoo categories)</p>
-            </div>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              {[{ label: "Need", val: d.typeSplit.Need, color: "var(--blue)" }, { label: "Want", val: d.typeSplit.Want, color: "var(--orange)" }, { label: "Saving", val: d.typeSplit.Saving, color: "var(--green)" }].map(({ label, val, color }) => (
-                <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span style={{ width: 10, height: 10, borderRadius: "50%", background: color, display: "inline-block" }} />
-                  <span style={{ fontSize: "0.78rem", color: "var(--text-secondary)", fontWeight: 500 }}>{label} {monthlyTotal > 0 ? Math.round((val / monthlyTotal) * 100) : 0}%</span>
+        <StatTile label="Today" value={inr(d.todaySpend)} sub="logged today" flash={flashStats} />
+        <StatTile label="This week" value={inr(d.weeklySpend)} sub={`${Math.round(weeklyPct)}% of limit`} flash={flashStats} />
+        <StatTile label="This month" value={inr(d.monthlySpend)} sub="your spend" flash={flashStats} />
+
+        <BentoCard title="Weekly budget" subtitle={`Limit ${inr(d.weeklyLimit)}`} span={1}>
+          <DonutChart
+            size={108}
+            centerValue={`${Math.round(weeklyPct)}%`}
+            centerLabel={weeklyOver ? "over" : "used"}
+            segments={[
+              { label: "Spent", value: d.weeklySpend, color: weeklyOver ? "var(--red)" : "var(--orange)" },
+              { label: "Left", value: weeklyRemaining, color: "var(--green)" },
+            ]}
+          />
+        </BentoCard>
+
+        <BentoCard title="Spend by category" subtitle="This month" span={2} href="/expenses">
+          <DonutChart segments={categorySegments} size={110} centerValue={inr(d.monthlySpend)} centerLabel="total" />
+        </BentoCard>
+
+        <BentoCard title="Need / Want / Saving" subtitle="This month" span={1} href="/monthly">
+          <PieChart segments={typeSegments} size={88} />
+        </BentoCard>
+
+        <BentoCard title="Recent" subtitle="Latest 3" span={1} href="/expenses">
+          {recentThree.length === 0 ? (
+            <p className="chart-empty-text">No expenses yet. Speak one above!</p>
+          ) : (
+            <div className="recent-list">
+              {recentThree.map((e) => (
+                <div key={e.id} className="recent-row">
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
+                    <div className="recent-icon">{categoryIcon(e.category)}</div>
+                    <div className="recent-meta">
+                      <p className="recent-title">{e.description}</p>
+                      <p className="recent-sub">
+                        {new Date(e.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                        {e.isSplit && e.amount !== expenseShare(e) ? ` · paid ${inr(e.amount)}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="recent-amt">{inr(expenseShare(e))}</span>
                 </div>
               ))}
             </div>
-          </div>
-          <SplitBar label="Need" amount={d.typeSplit.Need} total={monthlyTotal} color="var(--blue)" />
-          <SplitBar label="Want" amount={d.typeSplit.Want} total={monthlyTotal} color="var(--orange)" />
-          <SplitBar label="Saving" amount={d.typeSplit.Saving} total={monthlyTotal} color="var(--green)" />
-        </div>
-
-        {/* Splits & lending summaries */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
-          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "var(--radius-card)", padding: "18px 22px", boxShadow: "var(--shadow-sm)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Split plate</p>
-              <a href="#splits" style={{ fontSize: "0.78rem", color: "var(--accent)", fontWeight: 600 }}>View →</a>
-            </div>
-            <p style={{ fontSize: "1.5rem", fontWeight: 800, color: (d.splitsNetTotal ?? 0) >= 0 ? "var(--green)" : "var(--orange)", margin: "0 0 8px" }}>
-              {(d.splitsNetTotal ?? 0) >= 0 ? "+" : ""}{inr(d.splitsNetTotal ?? 0)}
-            </p>
-            {(d.splitsSummary ?? []).length === 0 ? (
-              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Plate is settled</p>
-            ) : (
-              (d.splitsSummary ?? []).map(s => (
-                <div key={s.flatmateId} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: "0.82rem" }}>
-                  <span>{s.name}</span>
-                  <span style={{ fontWeight: 700, color: (s.netBalance ?? s.pendingTotal) >= 0 ? "var(--green)" : "var(--orange)" }}>
-                    {(s.netBalance ?? s.pendingTotal) >= 0 ? "+" : ""}{inr(s.netBalance ?? s.pendingTotal)}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "var(--radius-card)", padding: "18px 22px", boxShadow: "var(--shadow-sm)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Lending pending</p>
-              <a href="#lending" style={{ fontSize: "0.78rem", color: "var(--accent)", fontWeight: 600 }}>View →</a>
-            </div>
-            <p style={{ fontSize: "2rem", fontWeight: 800, color: "var(--text-primary)", margin: 0 }}>{inr(d.lendingSummary?.totalPending ?? 0)}</p>
-            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: 4 }}>Total to receive</p>
-          </div>
-        </div>
-
-        {/* Quick stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 20 }}>
-          <StatCard label="Today" value={inr(d.todaySpend)} sub="today's logged" flash={flashStats} />
-          <StatCard label="This Week" value={inr(d.weeklySpend)} sub={`${Math.round(weeklyPct)}% of limit`} flash={flashStats} />
-          <StatCard label="This Month" value={inr(d.monthlySpend)} sub="total expenses" flash={flashStats} />
-        </div>
-
-        {/* Recent expenses */}
-        <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "var(--radius-card)", padding: "18px 22px", marginBottom: 20, boxShadow: "var(--shadow-sm)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <p style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text-primary)" }}>Recent expenses</p>
-            <a href="#expenses" style={{ fontSize: "0.8rem", color: "var(--accent)", fontWeight: 600 }}>See all →</a>
-          </div>
-          {d.recentExpenses.length === 0 ? (
-            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", padding: "20px 0", textAlign: "center" }}>No expenses yet. Speak one above!</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              {d.recentExpenses.map((e, i) => {
-                const typeColor = e.type === "Need" ? "var(--blue)" : e.type === "Want" ? "var(--orange)" : "var(--green)";
-                return (
-                  <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 0", borderBottom: i < d.recentExpenses.length - 1 ? "1px solid var(--border-light)" : "none" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--parchment)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.9rem", flexShrink: 0 }}>{categoryIcon(e.category)}</div>
-                      <div style={{ minWidth: 0 }}>
-                        <p style={{ fontWeight: 600, fontSize: "0.88rem", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.description}</p>
-                        <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                          {e.category} · {new Date(e.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                          {e.isSplit && e.amount !== expenseShare(e) ? ` · Split · paid ${inr(e.amount)}` : ""}
-                        </p>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                      <span style={{ fontSize: "0.7rem", color: typeColor, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>{e.type}</span>
-                      <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text-primary)" }}>{inr(expenseShare(e))}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           )}
-        </div>
-      </div>
+        </BentoCard>
 
-      {/* Consolidated sections */}
-      <IncomeSection refreshKey={refreshKey} onChanged={refreshAll} />
-      <ExpensesSection refreshKey={refreshKey} onChanged={refreshAll} />
-      <SplitsSection refreshKey={refreshKey} onChanged={refreshAll} />
-      <LendingSection refreshKey={refreshKey} onChanged={refreshAll} />
-      <WeeklySection refreshKey={refreshKey} />
-      <MonthlySection refreshKey={refreshKey} />
+        <BentoCard title="Weekly analysis" subtitle="Last 8 weeks · orange line = limit" span={2} href="/weekly">
+          <BarChart items={weeklyBars} limit={weeklyLimit} />
+        </BentoCard>
+
+        <BentoCard title="Monthly report" subtitle="Last 6 months" span={2} href="/monthly">
+          <BarChart items={monthBars} />
+        </BentoCard>
+
+        <BentoCard title="Spending heatmap" subtitle={`${new Date().getFullYear()} · daily intensity`} span={4}>
+          <DashboardHeatmap expenses={expenses} dayThreshold={dayThreshold} />
+        </BentoCard>
+      </div>
     </div>
   );
 }

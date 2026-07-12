@@ -1,6 +1,5 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
+/** Same-origin /api proxy by default (see next.config rewrites). Set NEXT_PUBLIC_API_URL only for direct backend calls. */
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export class ApiError extends Error {
   status: number;
