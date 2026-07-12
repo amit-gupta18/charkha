@@ -12,6 +12,9 @@ import incomeRoutes from "./routes/income";
 import parseRoutes from "./routes/parse";
 import dashboardRoutes from "./routes/dashboard";
 import knowledgeRoutes from "./routes/knowledge";
+import flatmateRoutes from "./routes/flatmates";
+import splitRoutes from "./routes/splits";
+import lendingRoutes from "./routes/lending";
 import coinRoutes from "./routes/coins";
 
 export function createApp() {
@@ -39,6 +42,9 @@ export function createApp() {
   app.use("/api/dashboard", requireAuth, dashboardRoutes);
   app.use("/api/knowledge", requireAuth, knowledgeRoutes);
   app.use("/api/coins", requireAuth, coinRoutes);
+  app.use("/api/flatmates", requireAuth, flatmateRoutes);
+  app.use("/api/splits", requireAuth, splitRoutes);
+  app.use("/api/lending", requireAuth, lendingRoutes);
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(err);

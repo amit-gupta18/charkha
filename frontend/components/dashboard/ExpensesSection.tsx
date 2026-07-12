@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { CATEGORIES, PAYMENT_MODES } from "@/lib/constants";
-import { inr } from "@/lib/format";
+import { inr, expenseShare } from "@/lib/format";
 import type { Expense } from "@/lib/types";
 import { Alert, FieldLabel, PageCard, SectionTitle } from "@/components/ui/PageShell";
 import { CreamSelect } from "@/components/ui/CreamSelect";
@@ -120,7 +120,12 @@ export function ExpensesSection({ refreshKey = 0, onChanged, embedded = true }: 
                   <td>{e.category}</td>
                   <td><span style={{ color: typeColor(e.type), fontWeight: 700, fontSize: "0.75rem" }}>{e.type}</span></td>
                   <td>{e.paymentMode}</td>
-                  <td className="amount">{inr(e.amount, 2)}</td>
+                  <td className="amount">
+                    {inr(expenseShare(e), 2)}
+                    {e.isSplit && e.amount !== expenseShare(e) && (
+                      <span style={{ display: "block", fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 500 }}>Split · paid {inr(e.amount, 2)}</span>
+                    )}
+                  </td>
                   <td className="actions">
                     <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: "0.78rem" }} onClick={() => edit(e)}>Edit</button>
                     <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: "0.78rem", color: "var(--red)", marginLeft: 4 }} onClick={() => remove(e.id)}>Delete</button>

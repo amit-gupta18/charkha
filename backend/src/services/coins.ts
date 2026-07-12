@@ -7,7 +7,8 @@ export async function applyCoinRulesForExpense(userId: string, expense: ExpenseD
   const serialized = serializeExpense(expense);
 
   if (serialized.type === "Want") {
-    const amount = -Math.max(1, Math.round(serialized.amount / 100));
+    const spendAmount = serialized.userShare ?? serialized.amount;
+    const amount = -Math.max(1, Math.round(spendAmount / 100));
 
     await CoinTransaction.create({
       userId,
@@ -61,7 +62,7 @@ export async function ensureWeeklyUnderBudgetBonus(userId: string, weekStartISO:
     {
       $group: {
         _id: null,
-        total: { $sum: "$amount" },
+        total: { $sum: { $ifNull: ["$userShare", "$amount"] } },
       },
     },
   ]);

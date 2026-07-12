@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
-import { dateKey, inr, monthStr } from "@/lib/format";
+import { dateKey, expenseShare, inr, monthStr } from "@/lib/format";
 import type { Expense, Settings } from "@/lib/types";
 import { Alert, FieldLabel, PageCard, SectionTitle } from "@/components/ui/PageShell";
 import { CreamMonthPicker } from "@/components/ui/CreamMonthPicker";
@@ -100,7 +100,7 @@ export function MonthlySection({ refreshKey = 0, embedded = true }: Props) {
     for (const expense of expenses) {
       const key = dateKey(expense.date);
       const categories = byDate.get(key) ?? new Map<string, number>();
-      categories.set(expense.category, (categories.get(expense.category) ?? 0) + expense.amount);
+      categories.set(expense.category, (categories.get(expense.category) ?? 0) + expenseShare(expense));
       byDate.set(key, categories);
     }
 
@@ -121,13 +121,13 @@ export function MonthlySection({ refreshKey = 0, embedded = true }: Props) {
 
   const categoryTotals = useMemo(() => {
     const m = new Map<string, number>();
-    for (const e of monthExpenses) m.set(e.category, (m.get(e.category) ?? 0) + e.amount);
+    for (const e of monthExpenses) m.set(e.category, (m.get(e.category) ?? 0) + expenseShare(e));
     return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
   }, [monthExpenses]);
 
   const typeSplit = useMemo(() => {
     const s = { Need: 0, Want: 0, Saving: 0 };
-    for (const e of monthExpenses) s[e.type] += e.amount;
+    for (const e of monthExpenses) s[e.type] += expenseShare(e);
     return s;
   }, [monthExpenses]);
 
@@ -135,12 +135,12 @@ export function MonthlySection({ refreshKey = 0, embedded = true }: Props) {
     const m = new Map<string, number>();
     for (const e of monthExpenses) {
       const key = dateKey(e.date);
-      m.set(key, (m.get(key) ?? 0) + e.amount);
+      m.set(key, (m.get(key) ?? 0) + expenseShare(e));
     }
     return m;
   }, [monthExpenses]);
 
-  const monthTotal = monthExpenses.reduce((a, e) => a + e.amount, 0);
+  const monthTotal = monthExpenses.reduce((a, e) => a + expenseShare(e), 0);
   const year = Number(month.slice(0, 4));
   const dayThreshold = (settings?.weeklyLimit ?? 2500) / 7 || 1;
 

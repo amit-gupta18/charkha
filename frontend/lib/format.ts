@@ -3,6 +3,10 @@ export const inr = (n: number, decimals = 0) =>
 
 export const today = () => new Date().toISOString().slice(0, 10);
 
+/** Amount counted toward user's spend (split expenses use userShare). */
+export const expenseShare = (e: { amount: number; userShare?: number }) =>
+  e.userShare ?? e.amount;
+
 export const monthStr = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { Types } from "mongoose";
 import { Expense, serializeExpense } from "../models/Expense";
 import { applyCoinRulesForExpense } from "../services/coins";
+import { createSplitMembers, deleteSplitMembersForExpense } from "../services/splits";
 import { CATEGORIES, PAYMENT_MODES, categoryToType, oneOf } from "../utils/categories";
 import { isNonEmptyString, isNumber, parseLocalDate } from "../utils/validators";
 
@@ -45,7 +46,7 @@ router.get("/", async (request, response, next) => {
 router.post("/", async (request, response, next) => {
   try {
     const userId = request.user!.userId;
-    const { date, description, category, amount, paymentMode, notes } = request.body ?? {};
+    const { date, description, category, amount, paymentMode, notes, split } = request.body ?? {};
 
     if (!isNonEmptyString(description) || !isNonEmptyString(category) || !isNonEmptyString(paymentMode)) {
       response.status(400).json({ message: "description, category and paymentMode are required." });
@@ -93,9 +94,26 @@ router.post("/", async (request, response, next) => {
       notes: typeof notes === "string" ? notes : "",
     });
 
+    let splitMembers;
+    if (split && Array.isArray(split.flatmateIds) && split.flatmateIds.length > 0) {
+      try {
+        splitMembers = await createSplitMembers(
+          userId,
+          expense,
+          split.flatmateIds,
+          Array.isArray(split.shares) ? split.shares : undefined,
+        );
+      } catch (err) {
+        await Expense.findByIdAndDelete(expense._id);
+        const message = err instanceof Error ? err.message : "Failed to create split.";
+        response.status(400).json({ message });
+        return;
+      }
+    }
+
     await applyCoinRulesForExpense(userId, expense);
 
-    response.status(201).json({ expense: serializeExpense(expense) });
+    response.status(201).json({ expense: serializeExpense(expense), splitMembers });
   } catch (error) {
     next(error);
   }
@@ -162,7 +180,12 @@ router.put("/:id", async (request, response, next) => {
         response.status(400).json({ message: "amount must be a positive number." });
         return;
       }
+      if (expense.isSplit) {
+        response.status(400).json({ message: "Cannot change amount on a split expense." });
+        return;
+      }
       expense.amount = amount;
+      expense.userShare = amount;
     }
     if (paymentMode !== undefined) {
       if (!oneOf(paymentMode, PAYMENT_MODES)) {
@@ -207,12 +230,22 @@ router.delete("/:id", async (request, response, next) => {
       return;
     }
 
-    const expense = await Expense.findOneAndDelete({ _id: id, userId });
+    const expense = await Expense.findOne({ _id: id, userId });
 
     if (!expense) {
       response.status(404).json({ message: "Expense not found." });
       return;
     }
+
+    try {
+      await deleteSplitMembersForExpense(userId, id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Cannot delete split expense.";
+      response.status(400).json({ message });
+      return;
+    }
+
+    await Expense.findOneAndDelete({ _id: id, userId });
 
     response.json({ success: true });
   } catch (error) {

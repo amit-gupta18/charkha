@@ -10,6 +10,8 @@ const LINKS = [
   { href: "/weekly",    label: "Weekly",    icon: "📅" },
   { href: "/monthly",   label: "Monthly",   icon: "📈" },
   { href: "/income",    label: "Income",    icon: "💰" },
+  { href: "/splits",    label: "Splits",    icon: "🤝" },
+  { href: "/lending",   label: "Lending",   icon: "📤" },
   { href: "/knowledge", label: "Knowledge", icon: "🧠" },
   { href: "/settings",  label: "Settings",  icon: "⚙️" },
 ];

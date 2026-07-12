@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
-import { inr, isoWeekKey } from "@/lib/format";
+import { inr, isoWeekKey, expenseShare } from "@/lib/format";
 import type { Expense, Settings } from "@/lib/types";
 import { Alert, PageCard, SectionTitle } from "@/components/ui/PageShell";
 
@@ -40,11 +40,11 @@ export function WeeklySection({ refreshKey = 0, embedded = true }: Props) {
     return Array.from(map.entries())
       .map(([key, items]) => ({
         key,
-        total: items.reduce((s, e) => s + e.amount, 0),
+        total: items.reduce((s, e) => s + expenseShare(e), 0),
         items,
         byCategory: Object.entries(
           items.reduce<Record<string, number>>((acc, e) => {
-            acc[e.category] = (acc[e.category] ?? 0) + e.amount;
+            acc[e.category] = (acc[e.category] ?? 0) + expenseShare(e);
             return acc;
           }, {})
         ).sort((a, b) => b[1] - a[1]),

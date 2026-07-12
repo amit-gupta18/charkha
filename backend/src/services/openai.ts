@@ -11,6 +11,10 @@ export interface ParsedExpense {
   date: string | null;
 }
 
+export interface ParsedSplitExpense extends ParsedExpense {
+  flatmate_names: string[];
+}
+
 export interface ParsedIncome {
   amount: number;
   source: string;
@@ -18,67 +22,129 @@ export interface ParsedIncome {
   date: string | null;
 }
 
-export type ParsedIntent = 
+export interface ParsedLending {
+  person_name: string;
+  amount: number;
+  reason: string | null;
+  date: string | null;
+}
+
+export interface ParsedSplitClear {
+  flatmate_name: string;
+  amount: number;
+  reason: string | null;
+  date: string | null;
+}
+
+export type ParsedIntent =
   | { intent: "expense"; data: ParsedExpense }
-  | { intent: "income"; data: ParsedIncome };
+  | { intent: "split_expense"; data: ParsedSplitExpense }
+  | { intent: "income"; data: ParsedIncome }
+  | { intent: "lending"; data: ParsedLending }
+  | { intent: "split_clear"; data: ParsedSplitClear };
 
 function getSystemPrompt() {
   const today = new Date().toISOString().split("T")[0];
-  return `You are an intelligent parser for a personal finance tracker. Given a transcript of a spoken or typed financial log, determine if it is an "expense" or an "income".
+  return `You are an intelligent parser for a personal finance tracker. Given a transcript, classify into exactly one intent: expense, split_expense, income, lending, or split_clear.
 
-If it is an expense, return a JSON object with this exact structure:
+If it is a regular expense (no split), return:
 {
   "intent": "expense",
   "data": {
-    "description": (string) short description of what was purchased,
-    "amount": (number) the amount in INR,
+    "description": (string),
+    "amount": (number) INR,
     "payment_mode": (string) one of ${JSON.stringify(PAYMENT_MODES)},
     "category": (string) one of ${JSON.stringify(CATEGORIES)},
-    "notes": (string or null) any extra context,
-    "date": (string or null) ISO date string in YYYY-MM-DD format (Today is ${today})
+    "notes": (string or null),
+    "date": (string or null) YYYY-MM-DD (Today is ${today})
   }
 }
 
-If it is an income, return a JSON object with this exact structure:
+If the user mentions splitting with flatmates (keywords: "split with", "split among", "split between"), return:
+{
+  "intent": "split_expense",
+  "data": {
+    "description": (string),
+    "amount": (number) total paid in INR,
+    "payment_mode": (string) one of ${JSON.stringify(PAYMENT_MODES)},
+    "category": (string) one of ${JSON.stringify(CATEGORIES)},
+    "notes": (string or null),
+    "date": (string or null) YYYY-MM-DD,
+    "flatmate_names": (string[]) names of flatmates to split with, e.g. ["Rahul", "Rohan"]
+  }
+}
+
+If it is income, return:
 {
   "intent": "income",
   "data": {
-    "amount": (number) the amount in INR,
+    "amount": (number),
     "source": (string) one of ${JSON.stringify(INCOME_SOURCES)},
-    "notes": (string or null) any extra context,
-    "date": (string or null) ISO date string in YYYY-MM-DD format (Today is ${today})
+    "notes": (string or null),
+    "date": (string or null) YYYY-MM-DD
   }
 }
 
-Respond ONLY with a single JSON object matching one of the formats above. Do not include markdown formatting or code fences.`;
+If the user lent money to someone (keywords: "lent", "loaned", "gave loan"), return:
+{
+  "intent": "lending",
+  "data": {
+    "person_name": (string),
+    "amount": (number),
+    "reason": (string or null) purpose e.g. "dinner",
+    "date": (string or null) YYYY-MM-DD
+  }
+}
+
+If a flatmate paid back toward splits (keywords: "cleared", "split clear", "paid back", "received from"), return:
+{
+  "intent": "split_clear",
+  "data": {
+    "flatmate_name": (string),
+    "amount": (number),
+    "reason": (string or null),
+    "date": (string or null) YYYY-MM-DD
+  }
+}
+
+Examples:
+- "Wifi 430 split with Rahul Rohan Priya UPI" → split_expense
+- "Lent Rahul 500 for dinner" → lending
+- "Rahul cleared 300 for grocery" → split_clear
+- "Swiggy 249 UPI" → expense
+
+Respond ONLY with a single JSON object. No markdown.`;
 }
 
 function extractJson(raw: string): unknown {
   const trimmed = raw.trim();
-
   const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
   const jsonCandidate = fenceMatch ? fenceMatch[1].trim() : trimmed;
-
   const firstBrace = jsonCandidate.indexOf("{");
   const lastBrace = jsonCandidate.lastIndexOf("}");
-
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    const inner = jsonCandidate.slice(firstBrace, lastBrace + 1);
-    return JSON.parse(inner);
+    return JSON.parse(jsonCandidate.slice(firstBrace, lastBrace + 1));
   }
-
   return JSON.parse(jsonCandidate);
+}
+
+function num(v: unknown): number {
+  return typeof v === "number" ? v : Number(v) || 0;
+}
+
+function str(v: unknown, fallback = ""): string {
+  return typeof v === "string" ? v : fallback;
+}
+
+function strOrNull(v: unknown): string | null {
+  return typeof v === "string" ? v : null;
 }
 
 export async function parseFinancialText(text: string): Promise<ParsedIntent> {
   const apiKey = env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("OpenAI API key not configured");
-  }
+  if (!apiKey) throw new Error("OpenAI API key not configured");
 
   const client = new OpenAI({ apiKey });
-
   const completion = await client.chat.completions.create({
     model: "gpt-4o",
     messages: [
@@ -89,7 +155,6 @@ export async function parseFinancialText(text: string): Promise<ParsedIntent> {
   });
 
   const raw = completion.choices[0]?.message?.content ?? "";
-
   let parsed: unknown;
   try {
     parsed = extractJson(raw);
@@ -99,30 +164,71 @@ export async function parseFinancialText(text: string): Promise<ParsedIntent> {
 
   const result = parsed as Record<string, any>;
   const data = result.data || {};
+  const intent = result.intent;
 
-  if (result.intent === "income") {
+  if (intent === "income") {
     return {
       intent: "income",
       data: {
-        amount: typeof data.amount === "number" ? data.amount : Number(data.amount) || 0,
-        source: typeof data.source === "string" ? data.source : INCOME_SOURCES[0],
-        notes: typeof data.notes === "string" ? data.notes : null,
-        date: typeof data.date === "string" ? data.date : null,
-      }
+        amount: num(data.amount),
+        source: str(data.source, INCOME_SOURCES[0]),
+        notes: strOrNull(data.notes),
+        date: strOrNull(data.date),
+      },
+    };
+  }
+
+  if (intent === "lending") {
+    return {
+      intent: "lending",
+      data: {
+        person_name: str(data.person_name),
+        amount: num(data.amount),
+        reason: strOrNull(data.reason),
+        date: strOrNull(data.date),
+      },
+    };
+  }
+
+  if (intent === "split_clear") {
+    return {
+      intent: "split_clear",
+      data: {
+        flatmate_name: str(data.flatmate_name),
+        amount: num(data.amount),
+        reason: strOrNull(data.reason),
+        date: strOrNull(data.date),
+      },
+    };
+  }
+
+  if (intent === "split_expense") {
+    const names = Array.isArray(data.flatmate_names)
+      ? data.flatmate_names.filter((n: unknown) => typeof n === "string")
+      : [];
+    return {
+      intent: "split_expense",
+      data: {
+        description: str(data.description),
+        amount: num(data.amount),
+        payment_mode: str(data.payment_mode, PAYMENT_MODES[0]),
+        category: str(data.category, CATEGORIES[0]),
+        notes: strOrNull(data.notes),
+        date: strOrNull(data.date),
+        flatmate_names: names,
+      },
     };
   }
 
   return {
     intent: "expense",
     data: {
-      description: typeof data.description === "string" ? data.description : "",
-      amount: typeof data.amount === "number" ? data.amount : Number(data.amount) || 0,
-      payment_mode:
-        typeof data.payment_mode === "string" ? data.payment_mode : PAYMENT_MODES[0],
-      category:
-        typeof data.category === "string" ? data.category : CATEGORIES[0],
-      notes: typeof data.notes === "string" ? data.notes : null,
-      date: typeof data.date === "string" ? data.date : null,
-    }
+      description: str(data.description),
+      amount: num(data.amount),
+      payment_mode: str(data.payment_mode, PAYMENT_MODES[0]),
+      category: str(data.category, CATEGORIES[0]),
+      notes: strOrNull(data.notes),
+      date: strOrNull(data.date),
+    },
   };
 }

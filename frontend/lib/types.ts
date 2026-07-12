@@ -17,6 +17,8 @@ export type Expense = {
   description: string;
   category: string;
   amount: number;
+  userShare: number;
+  isSplit: boolean;
   paymentMode: string;
   type: "Need" | "Want" | "Saving";
   notes?: string;
@@ -68,6 +70,52 @@ export type CoinTransaction = {
   createdAt?: string;
 };
 
+export type Flatmate = {
+  id: string;
+  name: string;
+  phone?: string;
+};
+
+export type SplitMember = {
+  id: string;
+  expenseId: string;
+  flatmateId: string;
+  amountOwed: number;
+  amountSettled: number;
+  amountPending: number;
+  status: "pending" | "settled";
+  flatmate?: Flatmate | null;
+};
+
+export type SplitExpense = {
+  expense: Expense;
+  members: SplitMember[];
+};
+
+export type SplitSettlement = {
+  id: string;
+  flatmateId: string;
+  flatmateName?: string;
+  amount: number;
+  reason: string;
+  date: string;
+};
+
+export type Lending = {
+  id: string;
+  personName: string;
+  amount: number;
+  reason: string;
+  date: string;
+  status: "pending" | "settled";
+};
+
+export type SplitsSummaryItem = {
+  flatmateId: string;
+  name: string;
+  pendingTotal: number;
+};
+
 export type DashboardData = {
   monthlyIncome: number;
   weeklyIncome: number;
@@ -84,4 +132,6 @@ export type DashboardData = {
   startingBalance: number;
   totalIncome: number;
   totalExpenses: number;
+  splitsSummary: SplitsSummaryItem[];
+  lendingSummary: { totalPending: number };
 };
