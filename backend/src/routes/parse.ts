@@ -78,6 +78,20 @@ router.post("/", async (request, response, next) => {
       return;
     }
 
+    if (parsed.intent === "savings") {
+      response.json({
+        intent: "savings",
+        data: {
+          kind: parsed.data.kind,
+          amount: parsed.data.amount,
+          destination: parsed.data.destination ?? "",
+          reason: parsed.data.reason ?? "",
+          date: parsed.data.date,
+        },
+      });
+      return;
+    }
+
     if (parsed.intent === "split_clear") {
       const flatmates = await Flatmate.find({ userId }).lean();
       const list = flatmates.map((f) => ({ id: String(f._id), name: f.name }));

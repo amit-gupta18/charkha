@@ -224,10 +224,13 @@ export function MonthlySection({ refreshKey = 0, embedded = true }: Props) {
             </div>
           )}
 
-          <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>Need / Want / Saving</p>
+          <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>Need / Want / Saving (spend)</p>
           <SplitBar label="Need" amount={typeSplit.Need} total={monthTotal} color="var(--blue)" />
           <SplitBar label="Want" amount={typeSplit.Want} total={monthTotal} color="var(--orange)" />
           <SplitBar label="Saving" amount={typeSplit.Saving} total={monthTotal} color="var(--green)" />
+          <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 8 }}>
+            Actual investments & savings are tracked on the <a href="/savings" style={{ color: "var(--accent)", fontWeight: 600 }}>Savings</a> page.
+          </p>
 
           <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", margin: "16px 0 10px" }}>Daily spend</p>
           {dayTotals.size === 0 ? (

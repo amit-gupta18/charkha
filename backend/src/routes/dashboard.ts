@@ -5,8 +5,10 @@ import { Income } from "../models/Income";
 import { Settings } from "../models/Settings";
 import { CoinTransaction } from "../models/CoinTransaction";
 import { Lending } from "../models/Lending";
+import { Saving } from "../models/Saving";
 import { getPlateBalances } from "../services/splits";
 import { serializeExpense } from "../models/Expense";
+import { spendAmountExpression } from "../utils/spend";
 import {
   addDaysUTC,
   startOfDayFromDate,
@@ -17,7 +19,7 @@ import {
 
 const router = Router();
 
-const spendSum = { $sum: { $ifNull: ["$userShare", "$amount"] } };
+const spendSum = { $sum: spendAmountExpression() };
 
 router.get("/", async (request, response, next) => {
   try {
@@ -35,19 +37,24 @@ router.get("/", async (request, response, next) => {
     const weeklyLimit = settings?.weeklyLimit ?? 2500;
     const startingBalance = settings?.startingBalance ?? 0;
 
-    const [totalIncomeAgg, totalExpensesAgg] = await Promise.all([
+    const [totalIncomeAgg, totalExpensesAgg, totalActiveSavingsAgg] = await Promise.all([
       Income.aggregate([{ $match: { userId } }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
       Expense.aggregate([{ $match: { userId } }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
+      Saving.aggregate([
+        { $match: { userId, status: "active" } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
     ]);
     const totalIncome = totalIncomeAgg[0]?.total ?? 0;
     const totalExpenses = totalExpensesAgg[0]?.total ?? 0;
-    const currentBalance = startingBalance + totalIncome - totalExpenses;
+    const totalActiveSavings = totalActiveSavingsAgg[0]?.total ?? 0;
+    const currentBalance = startingBalance + totalIncome - totalExpenses - totalActiveSavings;
 
     const lastWeekStart = addDaysUTC(weekStart, -7);
     const { ensureWeeklyUnderBudgetBonus } = await import("../services/coins");
     await ensureWeeklyUnderBudgetBonus(String(userId), lastWeekStart.toISOString());
 
-    const [incomeAgg, weeklyIncomeAgg, incomeBySourceAgg, weeklySpendAgg, monthlySpendAgg, todaySpendAgg, typeSplitAgg, lendingSummaryAgg] =
+    const [incomeAgg, weeklyIncomeAgg, incomeBySourceAgg, weeklySpendAgg, monthlySpendAgg, todaySpendAgg, typeSplitAgg, monthlySavingsAgg, savingsSummaryAgg, lendingSummaryAgg] =
       await Promise.all([
         Income.aggregate([
           { $match: { userId, date: { $gte: monthStart, $lt: monthEnd } } },
@@ -77,6 +84,21 @@ router.get("/", async (request, response, next) => {
           { $match: { userId, date: { $gte: monthStart, $lt: monthEnd } } },
           { $group: { _id: "$type", total: spendSum } },
         ]),
+        Saving.aggregate([
+          { $match: { userId, date: { $gte: monthStart, $lt: monthEnd } } },
+          { $group: { _id: null, total: { $sum: "$amount" } } },
+        ]),
+        Saving.aggregate([
+          { $match: { userId, status: "active" } },
+          {
+            $group: {
+              _id: null,
+              totalActive: { $sum: "$amount" },
+              totalInvested: { $sum: { $cond: [{ $eq: ["$kind", "invested"] }, "$amount", 0] } },
+              totalSaved: { $sum: { $cond: [{ $eq: ["$kind", "saved"] }, "$amount", 0] } },
+            },
+          },
+        ]),
         Lending.aggregate([
           { $match: { userId, status: "pending" } },
           { $group: { _id: null, totalPending: { $sum: "$amount" } } },
@@ -93,6 +115,7 @@ router.get("/", async (request, response, next) => {
     const weeklySpend = weeklySpendAgg[0]?.total ?? 0;
     const monthlySpend = monthlySpendAgg[0]?.total ?? 0;
     const todaySpend = todaySpendAgg[0]?.total ?? 0;
+    const monthlySavings = monthlySavingsAgg[0]?.total ?? 0;
 
     const typeSplit = { Need: 0, Want: 0, Saving: 0 };
     for (const row of typeSplitAgg) {
@@ -100,6 +123,12 @@ router.get("/", async (request, response, next) => {
         typeSplit[row._id as keyof typeof typeSplit] = row.total;
       }
     }
+
+    const savingsSummary = {
+      totalActive: savingsSummaryAgg[0]?.totalActive ?? 0,
+      totalInvested: savingsSummaryAgg[0]?.totalInvested ?? 0,
+      totalSaved: savingsSummaryAgg[0]?.totalSaved ?? 0,
+    };
 
     const recentExpenses = await Expense.find({ userId }).sort({ date: -1 }).limit(10).lean();
 
@@ -134,6 +163,7 @@ router.get("/", async (request, response, next) => {
       weeklyLimit,
       weeklyRatio,
       monthlySpend,
+      monthlySavings,
       todaySpend,
       typeSplit,
       recentExpenses: recentExpenses.map((e) => serializeExpense(e as any)),
@@ -142,9 +172,13 @@ router.get("/", async (request, response, next) => {
       startingBalance,
       totalIncome,
       totalExpenses,
+      totalActiveSavings,
       splitsSummary,
       splitsNetTotal: plate.netTotal,
+      splitsReceivable: plate.totalReceivable,
+      splitsPayable: plate.totalPayable,
       lendingSummary,
+      savingsSummary,
     });
   } catch (error) {
     next(error);

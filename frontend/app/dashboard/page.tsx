@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { CATEGORIES, PAYMENT_MODES, INCOME_SOURCES } from "@/lib/constants";
-import { dateKey, inr, isoWeekKey, today, expenseShare } from "@/lib/format";
-import type { DashboardData, Expense, Flatmate, Settings } from "@/lib/types";
+import { CATEGORIES, PAYMENT_MODES, INCOME_SOURCES, SAVINGS_DESTINATIONS, SAVINGS_KINDS } from "@/lib/constants";
+import { computeMonthLedger, monthKeyAfter } from "@/lib/balance";
+import { dateKey, expenseShare, inr, isoWeekKey, monthStr, today } from "@/lib/format";
+import type { DashboardData, Expense, Flatmate, Income, Saving, Settings } from "@/lib/types";
 import { PageLoading } from "@/components/ui/PageShell";
 import { CreamSelect } from "@/components/ui/CreamSelect";
 import { CreamDatePicker } from "@/components/ui/CreamDatePicker";
+import { CreamMonthPicker } from "@/components/ui/CreamMonthPicker";
 import { BentoCard, BarChart, DonutChart, PieChart, StatTile } from "@/components/dashboard/DashboardCharts";
 import { DashboardHeatmap } from "@/components/dashboard/DashboardHeatmap";
 
@@ -16,12 +18,14 @@ type ParsedExpense = { date: string | null; description: string | null; category
 type ParsedSplitExpense = ParsedExpense & { matchedFlatmates?: Flatmate[]; unmatchedFlatmates?: string[] };
 type ParsedIncome = { date: string | null; source: string | null; amount: number | null; notes?: string | null };
 type ParsedLending = { personName: string | null; amount: number | null; reason?: string | null; date: string | null };
+type ParsedSaving = { kind: "invested" | "saved" | null; amount: number | null; destination?: string | null; reason?: string | null; date: string | null };
 type ParsedSplitClear = { flatmateId: string | null; flatmateName: string | null; amount: number | null; reason?: string | null; date: string | null; unmatched?: boolean };
 type ParsedIntent =
   | { intent: "expense"; data: ParsedExpense }
   | { intent: "split_expense"; data: ParsedSplitExpense }
   | { intent: "income"; data: ParsedIncome }
   | { intent: "lending"; data: ParsedLending }
+  | { intent: "savings"; data: ParsedSaving }
   | { intent: "split_clear"; data: ParsedSplitClear };
 
 
@@ -32,28 +36,66 @@ const INTENT_LABELS: Record<string, string> = {
   split_expense: "🤝 Split Expense Detected",
   income: "💰 Income Detected",
   lending: "📤 Lending Detected",
+  savings: "🏦 Savings / Investment Detected",
   split_clear: "✅ Split Clear Detected",
 };
 
-function BalanceCard({ balance, startingBalance, totalIncome, totalExpenses, flash }: {
-  balance: number; startingBalance: number; totalIncome: number; totalExpenses: number; flash?: boolean;
+function BalanceCard({
+  monthLabel,
+  isCurrentMonth,
+  liveBalance,
+  monthOpening,
+  monthIncome,
+  monthExpenses,
+  monthSavings,
+  monthWithdrawals,
+  monthClosing,
+  prevMonthLabel,
+  nextMonthLabel,
+  splitsReceivable,
+  splitsPayable,
+  splitsNet,
+  lendingDebt,
+  savingsActive,
+  flash,
+}: {
+  monthLabel: string;
+  isCurrentMonth: boolean;
+  liveBalance: number;
+  monthOpening: number;
+  monthIncome: number;
+  monthExpenses: number;
+  monthSavings: number;
+  monthWithdrawals: number;
+  monthClosing: number;
+  prevMonthLabel: string | null;
+  nextMonthLabel: string;
+  splitsReceivable: number;
+  splitsPayable: number;
+  splitsNet: number;
+  lendingDebt: number;
+  savingsActive: number;
+  flash?: boolean;
 }) {
-  const low = balance < 1000;
+  const displayBalance = isCurrentMonth ? liveBalance : monthClosing;
+  const low = displayBalance < 1000;
   return (
     <div className={`bento-balance${flash ? " animate-flash" : ""}`}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
         <div>
           <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
-            Current balance
+            {isCurrentMonth ? "Current balance" : "Month closing"} · {monthLabel}
           </p>
           <p
             className={flash ? "animate-count-up" : ""}
             style={{ fontSize: "2.75rem", fontWeight: 800, color: low ? "var(--red)" : "var(--text-primary)", lineHeight: 1, letterSpacing: "-0.02em" }}
           >
-            {inr(balance)}
+            {inr(displayBalance)}
           </p>
-          <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: 8, maxWidth: 420, lineHeight: 1.5 }}>
-            Log every transaction and this stays in sync with your real account.
+          <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: 8, maxWidth: 480, lineHeight: 1.5 }}>
+            {isCurrentMonth
+              ? "This month's closing becomes next month's opening automatically."
+              : `This ${inr(monthClosing)} carries to ${nextMonthLabel} as opening balance.`}
           </p>
         </div>
         <div style={{ textAlign: "right" }}>
@@ -62,34 +104,90 @@ function BalanceCard({ balance, startingBalance, totalIncome, totalExpenses, fla
       </div>
       <div style={{ display: "flex", gap: 20, marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--border-light)", flexWrap: "wrap" }}>
         <div>
-          <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Starting</p>
-          <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text-secondary)" }}>{inr(startingBalance)}</p>
+          <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            {prevMonthLabel ? `Opening (from ${prevMonthLabel})` : "Opening"}
+          </p>
+          <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text-secondary)" }}>{inr(monthOpening)}</p>
         </div>
         <div>
           <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>+ Income</p>
-          <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--green)" }}>{inr(totalIncome)}</p>
+          <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--green)" }}>{inr(monthIncome)}</p>
         </div>
         <div>
           <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>− Expenses</p>
-          <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--orange)" }}>{inr(totalExpenses)}</p>
+          <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--orange)" }}>{inr(monthExpenses)}</p>
+        </div>
+        <div>
+          <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>− Savings</p>
+          <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--blue)" }}>{inr(monthSavings)}</p>
+        </div>
+        {monthWithdrawals > 0 && (
+          <div>
+            <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>+ Withdrawn</p>
+            <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--green)" }}>{inr(monthWithdrawals)}</p>
+          </div>
+        )}
+        <div>
+          <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Closing</p>
+          <p style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--text-primary)" }}>{inr(monthClosing)}</p>
         </div>
         <div style={{ marginLeft: "auto" }}>
-          <a href="/settings" style={{ fontSize: "0.78rem", color: "var(--accent)", fontWeight: 600 }}>Adjust baseline →</a>
+          <a href="/settings" style={{ fontSize: "0.78rem", color: "var(--accent)", fontWeight: 600 }}>Baseline →</a>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 20, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-light)", flexWrap: "wrap" }}>
+        <div style={{ width: "100%", marginBottom: 2 }}>
+          <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Carried forward (splits & lending — not reset each month)
+          </p>
+        </div>
+        <div>
+          <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Split receivable</p>
+          <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--green)" }}>{inr(splitsReceivable)}</p>
+        </div>
+        <div>
+          <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Split payable</p>
+          <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--orange)" }}>{inr(splitsPayable)}</p>
+        </div>
+        <div>
+          <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Split net</p>
+          <p style={{ fontSize: "0.95rem", fontWeight: 600, color: splitsNet >= 0 ? "var(--green)" : "var(--orange)" }}>
+            {splitsNet >= 0 ? "+" : ""}{inr(splitsNet)}
+          </p>
+        </div>
+        <div>
+          <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Savings (active)</p>
+          <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--blue)" }}>{inr(savingsActive)}</p>
+        </div>
+        <div>
+          <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Lending (debt)</p>
+          <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text-primary)" }}>{inr(lendingDebt)}</p>
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <a href="/savings" style={{ fontSize: "0.78rem", color: "var(--accent)", fontWeight: 600 }}>Savings →</a>
+          <a href="/splits" style={{ fontSize: "0.78rem", color: "var(--accent)", fontWeight: 600 }}>Splits →</a>
+          <a href="/lending" style={{ fontSize: "0.78rem", color: "var(--accent)", fontWeight: 600 }}>Lending →</a>
         </div>
       </div>
     </div>
   );
 }
 
+function formatMonthLabel(monthKey: string) {
+  const [y, m] = monthKey.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+}
+
 function ConfirmCard({
-  intent, expenseForm, incomeForm, lendingForm, clearForm, splitFlatmateIds, splitShares, flatmates,
-  onConfirm, onCancel, saving, setExpenseForm, setIncomeForm, setLendingForm, setClearForm,
+  intent, expenseForm, incomeForm, lendingForm, savingsForm, clearForm, splitFlatmateIds, splitShares, flatmates,
+  onConfirm, onCancel, saving, setExpenseForm, setIncomeForm, setLendingForm, setSavingsForm, setClearForm,
   setSplitFlatmateIds, setSplitShares, unmatchedFlatmates,
 }: {
   intent: string | null;
   expenseForm: { date: string; description: string; category: string; amount: string; paymentMode: string; notes: string };
   incomeForm: { date: string; source: string; amount: string; notes: string };
   lendingForm: { date: string; personName: string; amount: string; reason: string };
+  savingsForm: { date: string; kind: string; amount: string; destination: string; reason: string };
   clearForm: { date: string; flatmateId: string; amount: string; reason: string };
   splitFlatmateIds: string[];
   splitShares: Record<string, string>;
@@ -100,6 +198,7 @@ function ConfirmCard({
   setExpenseForm: React.Dispatch<React.SetStateAction<typeof expenseForm>>;
   setIncomeForm: React.Dispatch<React.SetStateAction<typeof incomeForm>>;
   setLendingForm: React.Dispatch<React.SetStateAction<typeof lendingForm>>;
+  setSavingsForm: React.Dispatch<React.SetStateAction<typeof savingsForm>>;
   setClearForm: React.Dispatch<React.SetStateAction<typeof clearForm>>;
   setSplitFlatmateIds: React.Dispatch<React.SetStateAction<string[]>>;
   setSplitShares: React.Dispatch<React.SetStateAction<Record<string, string>>>;
@@ -128,6 +227,7 @@ function ConfirmCard({
   const confirmAmt =
     intent === "income" ? Number(incomeForm.amount || 0)
     : intent === "lending" ? Number(lendingForm.amount || 0)
+    : intent === "savings" ? Number(savingsForm.amount || 0)
     : intent === "split_clear" ? Number(clearForm.amount || 0)
     : intent === "split_expense" ? userShare
     : Number(expenseForm.amount || 0);
@@ -193,6 +293,20 @@ function ConfirmCard({
         </div>
       )}
 
+      {intent === "savings" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>TYPE</p>
+            <CreamSelect value={savingsForm.kind} onChange={kind => setSavingsForm(f => ({ ...f, kind }))} options={[{ value: "invested", label: "Invested" }, { value: "saved", label: "Saved for later" }]} />
+          </div>
+          <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>AMOUNT (₹)</p><input className="cream-input" type="number" value={savingsForm.amount} onChange={e => setSavingsForm(f => ({ ...f, amount: e.target.value }))} /></div>
+          <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>WHERE</p>
+            <CreamSelect value={savingsForm.destination} onChange={destination => setSavingsForm(f => ({ ...f, destination }))} options={SAVINGS_DESTINATIONS} />
+          </div>
+          <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>NOTE</p><input className="cream-input" value={savingsForm.reason} onChange={e => setSavingsForm(f => ({ ...f, reason: e.target.value }))} /></div>
+          <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>DATE</p><CreamDatePicker value={savingsForm.date} onChange={date => setSavingsForm(f => ({ ...f, date }))} /></div>
+        </div>
+      )}
+
       {intent === "split_clear" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>FLATMATE</p>
@@ -243,13 +357,17 @@ export default function Home() {
   const [expenseForm, setExpenseForm] = useState<{ date: string; description: string; category: string; amount: string; paymentMode: string; notes: string }>({ date: today(), description: "", category: CATEGORIES[0], amount: "", paymentMode: PAYMENT_MODES[0], notes: "" });
   const [incomeForm, setIncomeForm] = useState<{ date: string; source: string; amount: string; notes: string }>({ date: today(), source: INCOME_SOURCES[0], amount: "", notes: "" });
   const [lendingForm, setLendingForm] = useState({ date: today(), personName: "", amount: "", reason: "" });
+  const [savingsForm, setSavingsForm] = useState({ date: today(), kind: SAVINGS_KINDS[0], amount: "", destination: SAVINGS_DESTINATIONS[0], reason: "" });
   const [clearForm, setClearForm] = useState({ date: today(), flatmateId: "", amount: "", reason: "" });
   const [splitFlatmateIds, setSplitFlatmateIds] = useState<string[]>([]);
   const [splitShares, setSplitShares] = useState<Record<string, string>>({});
   const [unmatchedFlatmates, setUnmatchedFlatmates] = useState<string[]>([]);
   const [flatmates, setFlatmates] = useState<Flatmate[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [incomes, setIncomes] = useState<Income[]>([]);
+  const [savingsEntries, setSavingsEntries] = useState<Saving[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState(() => monthStr(new Date()));
 
   const fetchDashboard = useCallback(() => {
     apiFetch<DashboardData>("/api/dashboard")
@@ -261,10 +379,14 @@ export default function Home() {
   const fetchChartData = useCallback(() => {
     Promise.all([
       apiFetch<{ expenses: Expense[] }>("/api/expenses"),
+      apiFetch<{ incomes: Income[] }>("/api/income"),
+      apiFetch<{ savings: Saving[] }>("/api/savings"),
       apiFetch<{ settings: Settings }>("/api/settings").catch(() => null),
     ])
-      .then(([exp, set]) => {
+      .then(([exp, inc, sav, set]) => {
         setExpenses(exp.expenses);
+        setIncomes(inc.incomes);
+        setSavingsEntries(sav.savings);
         setSettings(set?.settings ?? null);
       })
       .catch(() => {});
@@ -284,15 +406,58 @@ export default function Home() {
     }
   }, [authLoading, fetchDashboard, fetchChartData, refreshKey]);
 
-  const currentMonthKey = useMemo(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  }, []);
-
+  const isViewingCurrentMonth = selectedMonth === monthStr(new Date());
   const weeklyLimit = settings?.weeklyLimit ?? data?.weeklyLimit ?? 2500;
+  const monthlyBudget = settings?.monthlyIncome ?? 0;
+
+  const monthExpenses = useMemo(
+    () => expenses.filter((e) => dateKey(e.date).slice(0, 7) === selectedMonth),
+    [expenses, selectedMonth],
+  );
+
+  const monthIncomes = useMemo(
+    () => incomes.filter((i) => dateKey(i.date).slice(0, 7) === selectedMonth),
+    [incomes, selectedMonth],
+  );
+
+  const monthSpend = useMemo(
+    () => monthExpenses.reduce((s, e) => s + expenseShare(e), 0),
+    [monthExpenses],
+  );
+
+  const monthIncomeTotal = useMemo(
+    () => monthIncomes.reduce((s, i) => s + i.amount, 0),
+    [monthIncomes],
+  );
+
+  const monthInvested = useMemo(
+    () =>
+      savingsEntries
+        .filter((s) => dateKey(s.date).slice(0, 7) === selectedMonth && s.kind === "invested")
+        .reduce((sum, s) => sum + s.amount, 0),
+    [savingsEntries, selectedMonth],
+  );
+
+  const monthSaved = useMemo(
+    () =>
+      savingsEntries
+        .filter((s) => dateKey(s.date).slice(0, 7) === selectedMonth && s.kind === "saved")
+        .reduce((sum, s) => sum + s.amount, 0),
+    [savingsEntries, selectedMonth],
+  );
+
+  const monthSavingsTotal = monthInvested + monthSaved;
+
+  const monthTypeSplit = useMemo(() => {
+    const split = { Need: 0, Want: 0 };
+    for (const e of monthExpenses) {
+      if (e.type === "Need") split.Need += expenseShare(e);
+      else split.Want += expenseShare(e);
+    }
+    return split;
+  }, [monthExpenses]);
 
   const categorySegments = useMemo(() => {
-    const monthExpenses = expenses.filter((e) => dateKey(e.date).slice(0, 7) === currentMonthKey);
     const totals = new Map<string, number>();
     for (const e of monthExpenses) {
       totals.set(e.category, (totals.get(e.category) ?? 0) + expenseShare(e));
@@ -300,25 +465,23 @@ export default function Home() {
     return Array.from(totals.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([label, value]) => ({ label, value }));
-  }, [expenses, currentMonthKey]);
+  }, [monthExpenses]);
 
   const weeklyBars = useMemo(() => {
     const map = new Map<string, number>();
-    for (const e of expenses) {
+    for (const e of monthExpenses) {
       const k = isoWeekKey(e.date);
       map.set(k, (map.get(k) ?? 0) + expenseShare(e));
     }
-    const currentKey = isoWeekKey(today());
+    const currentKey = isViewingCurrentMonth ? isoWeekKey(today()) : "";
     return Array.from(map.entries())
-      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-      .slice(0, 8)
-      .reverse()
+      .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([key, value]) => ({
         label: key.split("-W")[1] ? `W${key.split("-W")[1]}` : key,
         value,
         highlight: key === currentKey,
       }));
-  }, [expenses]);
+  }, [monthExpenses, isViewingCurrentMonth]);
 
   const monthBars = useMemo(() => {
     const map = new Map<string, number>();
@@ -326,21 +489,63 @@ export default function Home() {
       const k = dateKey(e.date).slice(0, 7);
       map.set(k, (map.get(k) ?? 0) + expenseShare(e));
     }
-    const now = new Date();
+    const [year, month] = selectedMonth.split("-").map(Number);
     const items = [];
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const d = new Date(year, month - 1 - i, 1);
+      const k = monthStr(d);
       items.push({
         label: d.toLocaleDateString("en-IN", { month: "short" }),
         value: map.get(k) ?? 0,
-        highlight: k === currentMonthKey,
+        highlight: k === selectedMonth,
       });
     }
     return items;
-  }, [expenses, currentMonthKey]);
+  }, [expenses, selectedMonth]);
+
+  const recentThree = useMemo(
+    () =>
+      [...monthExpenses]
+        .sort((a, b) => dateKey(b.date).localeCompare(dateKey(a.date)))
+        .slice(0, 3),
+    [monthExpenses],
+  );
+
+  const daysWithSpend = useMemo(() => {
+    const days = new Set(
+      monthExpenses.filter((e) => expenseShare(e) > 0).map((e) => dateKey(e.date)),
+    );
+    return days.size;
+  }, [monthExpenses]);
+
+  const avgDailySpend = useMemo(() => {
+    const [y, m] = selectedMonth.split("-").map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const divisor = isViewingCurrentMonth ? Math.max(1, new Date().getDate()) : daysInMonth;
+    return monthSpend / divisor;
+  }, [monthSpend, selectedMonth, isViewingCurrentMonth]);
 
   const dayThreshold = weeklyLimit / 7 || 1;
+
+  const monthLedger = useMemo(
+    () =>
+      computeMonthLedger(
+        selectedMonth,
+        settings?.startingBalance ?? data?.startingBalance ?? 0,
+        incomes,
+        expenses,
+        savingsEntries.map((s) => ({
+          date: dateKey(s.date),
+          amount: s.amount,
+          status: s.status,
+          withdrawnAt: s.withdrawnAt ? dateKey(String(s.withdrawnAt)) : null,
+        })),
+      ),
+    [selectedMonth, settings?.startingBalance, data?.startingBalance, incomes, expenses, savingsEntries],
+  );
+
+  const prevMonthLabel = monthLedger.prevMonthKey ? formatMonthLabel(monthLedger.prevMonthKey) : null;
+  const nextMonthLabel = formatMonthLabel(monthKeyAfter(selectedMonth));
 
   const fillExpenseForm = (p: ParsedExpense) => {
     setExpenseForm({
@@ -380,6 +585,15 @@ export default function Home() {
       } else if (res.intent === "lending") {
         const p = res.data;
         setLendingForm({ date: p.date || today(), personName: p.personName || "", amount: p.amount != null ? String(p.amount) : "", reason: p.reason || "" });
+      } else if (res.intent === "savings") {
+        const p = res.data;
+        setSavingsForm({
+          date: p.date || today(),
+          kind: p.kind === "saved" ? "saved" : "invested",
+          amount: p.amount != null ? String(p.amount) : "",
+          destination: p.destination && SAVINGS_DESTINATIONS.includes(p.destination as typeof SAVINGS_DESTINATIONS[number]) ? p.destination : SAVINGS_DESTINATIONS[0],
+          reason: p.reason || "",
+        });
       } else if (res.intent === "split_clear") {
         const p = res.data;
         setClearForm({ date: p.date || today(), flatmateId: p.flatmateId || flatmates[0]?.id || "", amount: p.amount != null ? String(p.amount) : "", reason: p.reason || "" });
@@ -424,6 +638,18 @@ export default function Home() {
       } else if (intentData.intent === "lending") {
         await apiFetch("/api/lending", { method: "POST", body: JSON.stringify({ date: lendingForm.date || today(), personName: lendingForm.personName, amount: Number(lendingForm.amount), reason: lendingForm.reason }) });
         setSuccessMsg(`✓ Lending saved — ${inr(Number(lendingForm.amount))}`);
+      } else if (intentData.intent === "savings") {
+        await apiFetch("/api/savings", {
+          method: "POST",
+          body: JSON.stringify({
+            date: savingsForm.date || today(),
+            kind: savingsForm.kind,
+            amount: Number(savingsForm.amount),
+            destination: savingsForm.destination,
+            reason: savingsForm.reason,
+          }),
+        });
+        setSuccessMsg(`✓ Savings logged — ${inr(Number(savingsForm.amount))}`);
       } else if (intentData.intent === "split_clear") {
         if (!clearForm.flatmateId) {
           setAgentError("Select a flatmate.");
@@ -442,7 +668,7 @@ export default function Home() {
     } catch (e) {
       setAgentError(e instanceof ApiError ? e.message : "Save failed.");
     } finally { setSaving(false); }
-  }, [intentData, expenseForm, incomeForm, lendingForm, clearForm, splitFlatmateIds, splitShares, unmatchedFlatmates, refreshAll]);
+  }, [intentData, expenseForm, incomeForm, lendingForm, savingsForm, clearForm, splitFlatmateIds, splitShares, unmatchedFlatmates, refreshAll]);
 
   const cancelConfirm = useCallback(() => {
     setIntentData(null); appStateRef.current = "IDLE";
@@ -487,39 +713,61 @@ export default function Home() {
   if (!user) return null;
 
   const d = data!;
-  const weeklyPct = d?.weeklyLimit > 0 ? Math.min(100, (d.weeklySpend / d.weeklyLimit) * 100) : 0;
-  const weeklyOver = d.weeklySpend > d.weeklyLimit;
+  const weeklyPct = isViewingCurrentMonth && d.weeklyLimit > 0 ? Math.min(100, (d.weeklySpend / d.weeklyLimit) * 100) : 0;
+  const weeklyOver = isViewingCurrentMonth && d.weeklySpend > d.weeklyLimit;
   const coinPositive = d.coinBalance >= 0;
 
-  const weeklyRemaining = Math.max(0, d.weeklyLimit - d.weeklySpend);
-  const recentThree = d.recentExpenses.slice(0, 3);
+  const weeklyRemaining = isViewingCurrentMonth ? Math.max(0, d.weeklyLimit - d.weeklySpend) : 0;
+  const monthBudgetPct = monthlyBudget > 0 ? Math.min(100, (monthSpend / monthlyBudget) * 100) : 0;
+  const monthBudgetOver = monthlyBudget > 0 && monthSpend > monthlyBudget;
+  const monthLabel = formatMonthLabel(selectedMonth);
+
   const typeSegments = [
-    { label: "Need", value: d.typeSplit.Need, color: "var(--blue)" },
-    { label: "Want", value: d.typeSplit.Want, color: "var(--orange)" },
-    { label: "Saving", value: d.typeSplit.Saving, color: "var(--green)" },
+    { label: "Need", value: monthTypeSplit.Need, color: "var(--blue)" },
+    { label: "Want", value: monthTypeSplit.Want, color: "var(--orange)" },
+    ...(monthInvested > 0 ? [{ label: "Invested", value: monthInvested, color: "var(--green)" }] : []),
+    ...(monthSaved > 0 ? [{ label: "Saved", value: monthSaved, color: "var(--accent)" }] : []),
   ];
 
   return (
     <div className="dashboard-page">
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
         <div>
           <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em" }}>Dashboard</p>
           <h1 style={{ fontSize: "1.6rem", fontWeight: 700, color: "var(--text-primary)", margin: "4px 0 0" }}>
             Welcome back, {user.name.split(" ")[0]} 👋
           </h1>
         </div>
-        <div className="badge badge-coin" style={{ padding: "6px 14px", fontSize: "0.85rem" }} title={coinPositive ? "Learning is outpacing want spending" : "Spending more wants than learning"}>
-          🪙 {d.coinBalance} coins
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ minWidth: 180 }}>
+            <p style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>View month</p>
+            <CreamMonthPicker value={selectedMonth} onChange={setSelectedMonth} monthsBack={36} />
+          </div>
+          <div className="badge badge-coin" style={{ padding: "6px 14px", fontSize: "0.85rem", alignSelf: "flex-end" }} title={coinPositive ? "Learning is outpacing want spending" : "Spending more wants than learning"}>
+            🪙 {d.coinBalance} coins
+          </div>
         </div>
       </div>
 
       <div className="dashboard-bento">
         <div className="bento-span-4">
           <BalanceCard
-            balance={d.currentBalance ?? 0}
-            startingBalance={d.startingBalance ?? 0}
-            totalIncome={d.totalIncome ?? 0}
-            totalExpenses={d.totalExpenses ?? 0}
+            monthLabel={monthLabel}
+            isCurrentMonth={isViewingCurrentMonth}
+            liveBalance={d.currentBalance ?? 0}
+            monthOpening={monthLedger.opening}
+            monthIncome={monthLedger.income}
+            monthExpenses={monthLedger.expenses}
+            monthSavings={monthLedger.savings}
+            monthWithdrawals={monthLedger.withdrawals}
+            monthClosing={monthLedger.closing}
+            prevMonthLabel={prevMonthLabel}
+            nextMonthLabel={nextMonthLabel}
+            splitsReceivable={d.splitsReceivable ?? 0}
+            splitsPayable={d.splitsPayable ?? 0}
+            splitsNet={d.splitsNetTotal ?? 0}
+            lendingDebt={d.lendingSummary?.totalPending ?? 0}
+            savingsActive={d.savingsSummary?.totalActive ?? 0}
             flash={flashStats}
           />
         </div>
@@ -535,7 +783,7 @@ export default function Home() {
               value={interim || agentText}
               onChange={e => setAgentText(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && agentText.trim()) sendForParse(agentText); }}
-              placeholder={listening ? "Listening..." : "Try: 'Wifi 430 split with Rahul UPI' or 'Lent Rahul 500 for dinner'"}
+              placeholder={listening ? "Listening..." : "Try: 'Wifi 430 split with Rahul' · 'Invested 5000 in SIP' · 'Lent Rahul 500'"}
               style={{ flex: 1 }}
             />
             <button className="btn-accent" onClick={() => sendForParse(agentText)} disabled={parsing || !agentText.trim()} style={{ flexShrink: 0, padding: "10px 18px" }}>
@@ -549,6 +797,7 @@ export default function Home() {
             expenseForm={expenseForm}
             incomeForm={incomeForm}
             lendingForm={lendingForm}
+            savingsForm={savingsForm}
             clearForm={clearForm}
             splitFlatmateIds={splitFlatmateIds}
             splitShares={splitShares}
@@ -560,39 +809,73 @@ export default function Home() {
             setExpenseForm={setExpenseForm}
             setIncomeForm={setIncomeForm}
             setLendingForm={setLendingForm}
+            setSavingsForm={setSavingsForm}
             setClearForm={setClearForm}
             setSplitFlatmateIds={setSplitFlatmateIds}
             setSplitShares={setSplitShares}
           />
         </div>
 
-        <StatTile label="Today" value={inr(d.todaySpend)} sub="logged today" flash={flashStats} />
-        <StatTile label="This week" value={inr(d.weeklySpend)} sub={`${Math.round(weeklyPct)}% of limit`} flash={flashStats} />
-        <StatTile label="This month" value={inr(d.monthlySpend)} sub="your spend" flash={flashStats} />
+        {isViewingCurrentMonth ? (
+          <>
+            <StatTile label="Today" value={inr(d.todaySpend)} sub="expenses" flash={flashStats} />
+            <StatTile label="This week" value={inr(d.weeklySpend)} sub={`${Math.round(weeklyPct)}% of limit`} flash={flashStats} />
+            <StatTile label={monthLabel} value={inr(monthSpend)} sub={monthSavingsTotal > 0 ? `${inr(monthSavingsTotal)} to savings` : "expenses"} flash={flashStats} />
+          </>
+        ) : (
+          <>
+            <StatTile label={monthLabel} value={inr(monthSpend)} sub="expenses" flash={flashStats} />
+            <StatTile label="Savings" value={inr(monthSavingsTotal)} sub={monthInvested > 0 && monthSaved > 0 ? `${inr(monthInvested)} invested · ${inr(monthSaved)} saved` : monthInvested > 0 ? "invested" : monthSaved > 0 ? "saved for later" : "none logged"} flash={flashStats} />
+            <StatTile label="Income" value={inr(monthIncomeTotal)} sub="logged this month" flash={flashStats} />
+          </>
+        )}
 
-        <BentoCard title="Weekly budget" subtitle={`Limit ${inr(d.weeklyLimit)}`} span={1}>
-          <DonutChart
-            size={108}
-            centerValue={`${Math.round(weeklyPct)}%`}
-            centerLabel={weeklyOver ? "over" : "used"}
-            segments={[
-              { label: "Spent", value: d.weeklySpend, color: weeklyOver ? "var(--red)" : "var(--orange)" },
-              { label: "Left", value: weeklyRemaining, color: "var(--green)" },
-            ]}
-          />
+        <BentoCard
+          title={isViewingCurrentMonth ? "Weekly budget" : "Monthly budget"}
+          subtitle={isViewingCurrentMonth ? `Limit ${inr(d.weeklyLimit)}` : monthlyBudget > 0 ? `Budget ${inr(monthlyBudget)}` : monthLabel}
+          span={1}
+        >
+          {isViewingCurrentMonth ? (
+            <DonutChart
+              size={108}
+              centerValue={`${Math.round(weeklyPct)}%`}
+              centerLabel={weeklyOver ? "over" : "used"}
+              segments={[
+                { label: "Spent", value: d.weeklySpend, color: weeklyOver ? "var(--red)" : "var(--orange)" },
+                { label: "Left", value: weeklyRemaining, color: "var(--green)" },
+              ]}
+            />
+          ) : monthlyBudget > 0 ? (
+            <DonutChart
+              size={108}
+              centerValue={`${Math.round(monthBudgetPct)}%`}
+              centerLabel={monthBudgetOver ? "over" : "used"}
+              segments={[
+                { label: "Spent", value: monthSpend, color: monthBudgetOver ? "var(--red)" : "var(--orange)" },
+                { label: "Left", value: Math.max(0, monthlyBudget - monthSpend), color: "var(--green)" },
+              ]}
+            />
+          ) : (
+            <DonutChart
+              size={108}
+              centerValue={inr(monthSpend)}
+              centerLabel="spent"
+              segments={categorySegments.length > 0 ? categorySegments.slice(0, 5) : [{ label: "Spend", value: monthSpend || 1 }]}
+            />
+          )}
         </BentoCard>
 
-        <BentoCard title="Spend by category" subtitle="This month" span={2} href="/expenses">
-          <DonutChart segments={categorySegments} size={110} centerValue={inr(d.monthlySpend)} centerLabel="total" />
+        <BentoCard title="Spend by category" subtitle={monthLabel} span={2} href="/expenses">
+          <DonutChart segments={categorySegments} size={110} centerValue={inr(monthSpend)} centerLabel="total" />
         </BentoCard>
 
-        <BentoCard title="Need / Want / Saving" subtitle="This month" span={1} href="/monthly">
-          <PieChart segments={typeSegments} size={88} />
+        <BentoCard title="Need / Want / Savings" subtitle={`${monthLabel} · savings from /savings`} span={1} href="/savings">
+          <PieChart segments={typeSegments.length > 0 ? typeSegments : [{ label: "No data", value: 1, color: "var(--border-light)" }]} size={88} />
         </BentoCard>
 
-        <BentoCard title="Recent" subtitle="Latest 3" span={1} href="/expenses">
+        <BentoCard title="Recent" subtitle={`${monthLabel} · latest 3`} span={1} href="/expenses">
           {recentThree.length === 0 ? (
-            <p className="chart-empty-text">No expenses yet. Speak one above!</p>
+            <p className="chart-empty-text">No expenses in {monthLabel}.</p>
           ) : (
             <div className="recent-list">
               {recentThree.map((e) => (
@@ -614,16 +897,16 @@ export default function Home() {
           )}
         </BentoCard>
 
-        <BentoCard title="Weekly analysis" subtitle="Last 8 weeks · orange line = limit" span={2} href="/weekly">
-          <BarChart items={weeklyBars} limit={weeklyLimit} />
+        <BentoCard title="Weekly breakdown" subtitle={`${monthLabel} · by ISO week`} span={2} href="/weekly">
+          <BarChart items={weeklyBars} limit={isViewingCurrentMonth ? weeklyLimit : undefined} />
         </BentoCard>
 
-        <BentoCard title="Monthly report" subtitle="Last 6 months" span={2} href="/monthly">
+        <BentoCard title="Monthly trend" subtitle="6 months ending selected" span={2} href="/monthly">
           <BarChart items={monthBars} />
         </BentoCard>
 
-        <BentoCard title="Spending heatmap" subtitle={`${new Date().getFullYear()} · daily intensity`} span={4}>
-          <DashboardHeatmap expenses={expenses} dayThreshold={dayThreshold} />
+        <BentoCard title="Spending heatmap" subtitle={`${selectedMonth.slice(0, 4)} · daily intensity`} span={4}>
+          <DashboardHeatmap expenses={expenses} dayThreshold={dayThreshold} highlightMonth={selectedMonth} />
         </BentoCard>
       </div>
     </div>

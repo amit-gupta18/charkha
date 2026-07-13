@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { dateKey, expenseShare, inr } from "@/lib/format";
 import type { Expense } from "@/lib/types";
 
@@ -44,7 +44,17 @@ function buildMonthHeatmap(
   };
 }
 
-export function DashboardHeatmap({ expenses, dayThreshold }: { expenses: Expense[]; dayThreshold: number }) {
+export function DashboardHeatmap({
+  expenses,
+  dayThreshold,
+  highlightMonth,
+}: {
+  expenses: Expense[];
+  dayThreshold: number;
+  highlightMonth?: string;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   const dayData = useMemo(() => {
     const byDate = new Map<string, Map<string, number>>();
 
@@ -64,16 +74,32 @@ export function DashboardHeatmap({ expenses, dayThreshold }: { expenses: Expense
     return result;
   }, [expenses]);
 
-  const year = new Date().getFullYear();
-  const currentMonthIndex = new Date().getMonth();
+  const year = highlightMonth ? Number(highlightMonth.slice(0, 4)) : new Date().getFullYear();
+  const focusMonthIndex = highlightMonth ? Number(highlightMonth.slice(5, 7)) - 1 : new Date().getMonth();
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonthIndex = now.getMonth();
+  const lastMonthIndex =
+    year < currentYear ? 11 : year > currentYear ? -1 : Math.min(focusMonthIndex, currentMonthIndex);
 
   const heatmapMonths = useMemo(() => {
     const months: HeatmapMonth[] = [];
-    for (let monthIndex = 0; monthIndex <= currentMonthIndex; monthIndex++) {
+    for (let monthIndex = 0; monthIndex <= lastMonthIndex; monthIndex++) {
       months.push(buildMonthHeatmap(year, monthIndex, dayData));
     }
     return months;
-  }, [dayData, year, currentMonthIndex]);
+  }, [dayData, year, lastMonthIndex]);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container || !highlightMonth) return;
+
+    const target = container.querySelector<HTMLElement>(`[data-month="${highlightMonth}"]`);
+    if (!target) return;
+
+    const left = target.offsetLeft - container.clientWidth / 2 + target.clientWidth / 2;
+    container.scrollLeft = Math.max(0, left);
+  }, [highlightMonth, heatmapMonths]);
 
   function cellClass(total: number) {
     if (total <= 0) return "heatmap-none";
@@ -89,11 +115,13 @@ export function DashboardHeatmap({ expenses, dayThreshold }: { expenses: Expense
 
   return (
     <div>
-      <div className="heatmap-scroll heatmap-scroll-dashboard">
+      <div ref={scrollRef} className="heatmap-scroll heatmap-scroll-dashboard">
         <div className="heatmap-months">
           {heatmapMonths.map((monthBlock) => (
-            <div key={monthBlock.key} className="heatmap-month-block">
-              <p className="heatmap-month-label">{monthBlock.label}</p>
+            <div key={monthBlock.key} className="heatmap-month-block" data-month={monthBlock.key}>
+              <p className={`heatmap-month-label${monthBlock.key === highlightMonth ? " is-current" : ""}`}>
+                {monthBlock.label}
+              </p>
               <div className="heatmap-week-columns">
                 {monthBlock.weeks.map((week, weekIndex) => (
                   <div key={`${monthBlock.key}-w${weekIndex}`} className="heatmap-week-column">

@@ -29,6 +29,14 @@ export interface ParsedLending {
   date: string | null;
 }
 
+export interface ParsedSaving {
+  kind: "invested" | "saved";
+  amount: number;
+  destination: string | null;
+  reason: string | null;
+  date: string | null;
+}
+
 export interface ParsedSplitClear {
   flatmate_name: string;
   amount: number;
@@ -41,11 +49,12 @@ export type ParsedIntent =
   | { intent: "split_expense"; data: ParsedSplitExpense }
   | { intent: "income"; data: ParsedIncome }
   | { intent: "lending"; data: ParsedLending }
+  | { intent: "savings"; data: ParsedSaving }
   | { intent: "split_clear"; data: ParsedSplitClear };
 
 function getSystemPrompt() {
   const today = new Date().toISOString().split("T")[0];
-  return `You are an intelligent parser for a personal finance tracker. Given a transcript, classify into exactly one intent: expense, split_expense, income, lending, or split_clear.
+  return `You are an intelligent parser for a personal finance tracker. Given a transcript, classify into exactly one intent: expense, split_expense, income, lending, savings, or split_clear.
 
 If it is a regular expense (no split), return:
 {
@@ -96,6 +105,18 @@ If the user lent money to someone (keywords: "lent", "loaned", "gave loan"), ret
   }
 }
 
+If the user moved money to investments or personal savings (keywords: "invested", "invest", "SIP", "mutual fund", "saved for", "put in FD", "emergency fund"), NOT a regular expense purchase, return:
+{
+  "intent": "savings",
+  "data": {
+    "kind": (string) "invested" or "saved" — use "invested" for SIP/MF/stocks/FD; "saved" for bank savings/emergency jar,
+    "amount": (number),
+    "destination": (string or null) e.g. "SIP", "Mutual Fund", "FD", "Bank Savings",
+    "reason": (string or null),
+    "date": (string or null) YYYY-MM-DD
+  }
+}
+
 If a flatmate paid back toward splits (keywords: "cleared", "split clear", "paid back", "received from"), return:
 {
   "intent": "split_clear",
@@ -110,6 +131,8 @@ If a flatmate paid back toward splits (keywords: "cleared", "split clear", "paid
 Examples:
 - "Wifi 430 split with Rahul Rohan Priya UPI" → split_expense
 - "Lent Rahul 500 for dinner" → lending
+- "Invested 5000 in SIP" → savings kind invested
+- "Saved 2000 for emergency" → savings kind saved
 - "Rahul cleared 300 for grocery" → split_clear
 - "Swiggy 249 UPI" → expense
 
@@ -184,6 +207,20 @@ export async function parseFinancialText(text: string): Promise<ParsedIntent> {
       data: {
         person_name: str(data.person_name),
         amount: num(data.amount),
+        reason: strOrNull(data.reason),
+        date: strOrNull(data.date),
+      },
+    };
+  }
+
+  if (intent === "savings") {
+    const kind = data.kind === "saved" ? "saved" : "invested";
+    return {
+      intent: "savings",
+      data: {
+        kind,
+        amount: num(data.amount),
+        destination: strOrNull(data.destination),
         reason: strOrNull(data.reason),
         date: strOrNull(data.date),
       },

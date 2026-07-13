@@ -15,6 +15,7 @@ import knowledgeRoutes from "./routes/knowledge";
 import flatmateRoutes from "./routes/flatmates";
 import splitRoutes from "./routes/splits";
 import lendingRoutes from "./routes/lending";
+import savingsRoutes from "./routes/savings";
 import coinRoutes from "./routes/coins";
 
 export function createApp() {
@@ -45,6 +46,7 @@ export function createApp() {
   app.use("/api/flatmates", requireAuth, flatmateRoutes);
   app.use("/api/splits", requireAuth, splitRoutes);
   app.use("/api/lending", requireAuth, lendingRoutes);
+  app.use("/api/savings", requireAuth, savingsRoutes);
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(err);

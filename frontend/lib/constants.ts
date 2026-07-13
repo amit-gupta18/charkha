@@ -16,6 +16,18 @@ export const PAYMENT_MODES = [
 
 export const INCOME_SOURCES = ["Allowance", "Freelance", "Internship"] as const;
 
+export const SAVINGS_KINDS = ["invested", "saved"] as const;
+
+export const SAVINGS_DESTINATIONS = [
+  "SIP",
+  "Mutual Fund",
+  "Stocks",
+  "FD",
+  "Bank Savings",
+  "Emergency Fund",
+  "Other",
+] as const;
+
 export const KNOWLEDGE_SOURCE_TYPES = [
   "Video",
   "Article",

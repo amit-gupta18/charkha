@@ -132,6 +132,23 @@ export type Lending = {
   status: "pending" | "settled";
 };
 
+export type Saving = {
+  id: string;
+  kind: "invested" | "saved";
+  amount: number;
+  destination: string;
+  reason: string;
+  date: string;
+  status: "active" | "withdrawn";
+  withdrawnAt?: string | null;
+};
+
+export type SavingsSummary = {
+  totalActive: number;
+  totalInvested: number;
+  totalSaved: number;
+};
+
 export type SplitsSummaryItem = {
   flatmateId: string;
   name: string;
@@ -151,6 +168,8 @@ export type DashboardData = {
   monthlySpend: number;
   todaySpend: number;
   typeSplit: { Need: number; Want: number; Saving: number };
+  monthlySavings?: number;
+  totalActiveSavings?: number;
   recentExpenses: Expense[];
   coinBalance: number;
   currentBalance: number;
@@ -159,5 +178,8 @@ export type DashboardData = {
   totalExpenses: number;
   splitsSummary: SplitsSummaryItem[];
   splitsNetTotal?: number;
+  splitsReceivable?: number;
+  splitsPayable?: number;
   lendingSummary: { totalPending: number };
+  savingsSummary?: SavingsSummary;
 };

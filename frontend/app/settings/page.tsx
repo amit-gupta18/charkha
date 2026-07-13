@@ -75,7 +75,7 @@ export default function SettingsPage() {
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <NumField label="Starting Balance (₹)" value={s.startingBalance ?? 0} onChange={(v) => update({ startingBalance: v })} hint="Set to your real bank balance when you begin tracking. Current balance = starting + income − expenses." />
+          <NumField label="Starting Balance (₹)" value={s.startingBalance ?? 0} onChange={(v) => update({ startingBalance: v })} hint="Your bank balance when you first started tracking. Each new month opens with the previous month's closing balance." />
           <NumField label="Monthly Income (₹)" value={s.monthlyIncome} onChange={(v) => update({ monthlyIncome: v })} hint="Base allowance — freelance income logged separately" />
           <NumField label="Weekly Limit (₹)" value={s.weeklyLimit} onChange={(v) => update({ weeklyLimit: v })} hint="Max spend per week before going over budget" />
 
@@ -84,8 +84,12 @@ export default function SettingsPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
               <PctField label="Need" value={s.needsPct} onChange={(v) => update({ needsPct: v })} />
               <PctField label="Want" value={s.wantsPct} onChange={(v) => update({ wantsPct: v })} />
-              <PctField label="Saving" value={s.savingsPct} onChange={(v) => update({ savingsPct: v })} />
+              <PctField label="Saving target" value={s.savingsPct} onChange={(v) => update({ savingsPct: v })} />
             </div>
+            <p style={{ marginTop: 8, fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+              Budget target only — log actual investments & savings on the{" "}
+              <a href="/savings" style={{ color: "var(--accent)", fontWeight: 600 }}>Savings</a> page.
+            </p>
             <p style={{ marginTop: 8, fontSize: "0.78rem", color: totalOk ? "var(--green)" : "var(--red)", fontWeight: 600 }}>
               Total: {total.toFixed(2)} {totalOk ? "✓" : "— must equal 1.00"}
             </p>

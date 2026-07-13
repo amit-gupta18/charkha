@@ -1,6 +1,7 @@
 import { CoinTransaction } from "../models/CoinTransaction";
 import { Settings } from "../models/Settings";
 import { Expense } from "../models/Expense";
+import { spendAmountExpression } from "../utils/spend";
 import { ExpenseDocument, serializeExpense } from "../models/Expense";
 
 export async function applyCoinRulesForExpense(userId: string, expense: ExpenseDocument) {
@@ -62,7 +63,7 @@ export async function ensureWeeklyUnderBudgetBonus(userId: string, weekStartISO:
     {
       $group: {
         _id: null,
-        total: { $sum: { $ifNull: ["$userShare", "$amount"] } },
+        total: { $sum: spendAmountExpression() },
       },
     },
   ]);
