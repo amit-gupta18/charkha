@@ -357,7 +357,7 @@ export default function Home() {
   const [expenseForm, setExpenseForm] = useState<{ date: string; description: string; category: string; amount: string; paymentMode: string; notes: string }>({ date: today(), description: "", category: CATEGORIES[0], amount: "", paymentMode: PAYMENT_MODES[0], notes: "" });
   const [incomeForm, setIncomeForm] = useState<{ date: string; source: string; amount: string; notes: string }>({ date: today(), source: INCOME_SOURCES[0], amount: "", notes: "" });
   const [lendingForm, setLendingForm] = useState({ date: today(), personName: "", amount: "", reason: "" });
-  const [savingsForm, setSavingsForm] = useState({ date: today(), kind: SAVINGS_KINDS[0], amount: "", destination: SAVINGS_DESTINATIONS[0], reason: "" });
+  const [savingsForm, setSavingsForm] = useState<{ date: string; kind: string; amount: string; destination: string; reason: string }>({ date: today(), kind: SAVINGS_KINDS[0], amount: "", destination: SAVINGS_DESTINATIONS[0], reason: "" });
   const [clearForm, setClearForm] = useState({ date: today(), flatmateId: "", amount: "", reason: "" });
   const [splitFlatmateIds, setSplitFlatmateIds] = useState<string[]>([]);
   const [splitShares, setSplitShares] = useState<Record<string, string>>({});

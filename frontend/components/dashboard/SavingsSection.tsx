@@ -15,9 +15,9 @@ export function SavingsSection({ refreshKey = 0, onChanged, embedded = true }: P
   const [entries, setEntries] = useState<Saving[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{ date: string; kind: string; amount: string; destination: string; reason: string }>({
     date: today(),
-    kind: SAVINGS_KINDS[0] as (typeof SAVINGS_KINDS)[number],
+    kind: SAVINGS_KINDS[0],
     amount: "",
     destination: SAVINGS_DESTINATIONS[0],
     reason: "",
@@ -112,7 +112,7 @@ export function SavingsSection({ refreshKey = 0, onChanged, embedded = true }: P
           <FieldLabel>Type</FieldLabel>
           <CreamSelect
             value={form.kind}
-            onChange={(kind) => setForm({ ...form, kind: kind as (typeof SAVINGS_KINDS)[number] })}
+            onChange={(kind) => setForm({ ...form, kind })}
             options={[
               { value: "invested", label: "Invested" },
               { value: "saved", label: "Saved for later" },
