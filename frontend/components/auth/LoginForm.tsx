@@ -28,8 +28,11 @@ export function LoginForm() {
         body: JSON.stringify({ email, password }),
       });
 
+      // Confirm cookies were stored before enabling authenticated queries.
+      await apiFetch<AuthResponse>("/api/auth/me");
+
       setUser(data.user);
-      void queryClient.invalidateQueries();
+      await queryClient.invalidateQueries();
       broadcastAuthEvent("login");
       router.replace("/dashboard");
       router.refresh();

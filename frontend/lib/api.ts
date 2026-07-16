@@ -1,4 +1,4 @@
-/** Same-origin /api proxy by default (see next.config rewrites). Set NEXT_PUBLIC_API_URL only for direct backend calls. */
+/** Calls the backend directly via NEXT_PUBLIC_API_URL (cross-origin, cookie auth). */
 import { broadcastAuthEvent, withRefreshLock } from "@/lib/sessionSync";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";

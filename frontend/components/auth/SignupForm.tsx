@@ -29,8 +29,10 @@ export function SignupForm() {
         body: JSON.stringify({ name, email, password }),
       });
 
+      await apiFetch<AuthResponse>("/api/auth/me");
+
       setUser(data.user);
-      void queryClient.invalidateQueries();
+      await queryClient.invalidateQueries();
       broadcastAuthEvent("login");
       router.replace("/dashboard");
       router.refresh();
