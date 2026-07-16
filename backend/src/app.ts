@@ -21,6 +21,7 @@ import coinRoutes from "./routes/coins";
 export function createApp() {
   const app = express();
 
+  app.set("trust proxy", 1);
   app.use(cors(corsOptions()));
   app.use(express.json());
   app.use(cookieParser());

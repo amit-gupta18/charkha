@@ -23,7 +23,7 @@ export const env = {
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN ?? "1h",
   COOKIE_NAME: process.env.COOKIE_NAME ?? "accessToken",
   REFRESH_COOKIE_NAME: process.env.REFRESH_COOKIE_NAME ?? "refreshToken",
-  /** When true, auth cookies use SameSite=None (direct cross-origin API). Leave false when using Next.js /api proxy. */
+  /** When true, auth cookies use SameSite=None for direct cross-origin browser API calls. */
   COOKIE_CROSS_SITE: process.env.COOKIE_CROSS_SITE === "true",
   ACCESS_COOKIE_MAX_AGE_MS: Number(process.env.ACCESS_COOKIE_MAX_AGE_MS ?? 60 * 60 * 1000),
   REFRESH_TOKEN_MAX_AGE_MS: Number(process.env.REFRESH_TOKEN_MAX_AGE_MS ?? 7 * 24 * 60 * 60 * 1000),
