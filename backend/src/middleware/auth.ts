@@ -1,21 +1,18 @@
 import { NextFunction, Request, Response } from "express";
-import { env } from "../config/env";
-import { verifyAuthToken } from "../utils/jwt";
+import { resolveSession } from "../utils/authSession";
 
-export function requireAuth(request: Request, response: Response, next: NextFunction) {
-  const token = request.cookies?.[env.COOKIE_NAME];
-
-  if (!token) {
-    response.status(401).json({ message: "Unauthorized" });
-    return;
-  }
-
+export async function requireAuth(request: Request, response: Response, next: NextFunction) {
   try {
-    const payload = verifyAuthToken(token);
+    const session = await resolveSession(request, response);
+
+    if (!session) {
+      response.status(401).json({ message: "Unauthorized" });
+      return;
+    }
 
     request.user = {
-      userId: payload.userId,
-      email: payload.email,
+      userId: session.userId,
+      email: session.email,
     };
 
     next();

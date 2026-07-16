@@ -1,8 +1,7 @@
 import { Router } from "express";
-import { env } from "../config/env";
-import { Settings } from "../models/Settings";
 import { User } from "../models/User";
-import { clearAuthCookie, refreshAuthSession, setAuthCookie, signAuthToken, verifyAuthToken } from "../utils/jwt";
+import { Settings } from "../models/Settings";
+import { clearSession, establishSession, resolveSession } from "../utils/authSession";
 import { comparePassword, hashPassword } from "../utils/passwords";
 
 const router = Router();
@@ -53,12 +52,7 @@ router.post("/register", async (request, response, next) => {
 
     await Settings.create({ userId: user._id });
 
-    const token = signAuthToken({
-      userId: String(user._id),
-      email: user.email,
-    });
-
-    setAuthCookie(response, token);
+    await establishSession(response, String(user._id), user.email, request);
     response.status(201).json({ user: serializeUser(user) });
   } catch (error) {
     next(error);
@@ -89,51 +83,54 @@ router.post("/login", async (request, response, next) => {
       return;
     }
 
-    const token = signAuthToken({
-      userId: String(user._id),
-      email: user.email,
-    });
-
-    setAuthCookie(response, token);
+    await establishSession(response, String(user._id), user.email, request);
     response.json({ user: serializeUser(user) });
   } catch (error) {
     next(error);
   }
 });
 
-router.post("/logout", (_request, response) => {
-  clearAuthCookie(response);
+router.post("/logout", async (request, response) => {
+  await clearSession(request, response);
   response.json({ success: true });
 });
 
-router.get("/me", async (request, response, next) => {
-  try {
-    const token = request.cookies?.[env.COOKIE_NAME];
+router.post("/refresh", async (request, response) => {
+  const session = await resolveSession(request, response);
 
-    if (!token) {
-      response.status(401).json({ message: "Unauthorized" });
-      return;
-    }
-
-    const payload = verifyAuthToken(token);
-    const user = await User.findById(payload.userId);
-
-    if (!user) {
-      clearAuthCookie(response);
-      response.status(401).json({ message: "Unauthorized" });
-      return;
-    }
-
-    refreshAuthSession(response, {
-      userId: String(user._id),
-      email: user.email,
-    });
-
-    response.json({ user: serializeUser(user) });
-  } catch {
-    clearAuthCookie(response);
+  if (!session) {
     response.status(401).json({ message: "Unauthorized" });
+    return;
   }
+
+  const user = await User.findById(session.userId);
+
+  if (!user) {
+    await clearSession(request, response);
+    response.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+
+  response.json({ user: serializeUser(user) });
+});
+
+router.get("/me", async (request, response) => {
+  const session = await resolveSession(request, response);
+
+  if (!session) {
+    response.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+
+  const user = await User.findById(session.userId);
+
+  if (!user) {
+    await clearSession(request, response);
+    response.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+
+  response.json({ user: serializeUser(user) });
 });
 
 export default router;
