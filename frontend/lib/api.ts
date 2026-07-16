@@ -1,5 +1,9 @@
 /** Same-origin /api proxy by default (see next.config rewrites). Set NEXT_PUBLIC_API_URL only for direct backend calls. */
+import { broadcastAuthEvent, withRefreshLock } from "@/lib/sessionSync";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+const AUTH_NO_RETRY = ["/api/auth/login", "/api/auth/register", "/api/auth/logout"];
 
 export class ApiError extends Error {
   status: number;
@@ -11,7 +15,35 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+let refreshPromise: Promise<boolean> | null = null;
+
+function shouldRetryAuth(path: string) {
+  return !AUTH_NO_RETRY.some((route) => path.startsWith(route));
+}
+
+async function tryRefreshSession() {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = withRefreshLock(async () => {
+    const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    }).catch(() => null);
+
+    const ok = response?.ok ?? false;
+    if (ok) broadcastAuthEvent("refresh");
+    return ok;
+  })
+    .catch(() => false)
+    .finally(() => {
+      refreshPromise = null;
+    });
+
+  return refreshPromise;
+}
+
+export async function apiFetch<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     credentials: "include",
@@ -24,9 +56,20 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const contentType = response.headers.get("content-type") ?? "";
   const data = contentType.includes("application/json") ? await response.json() : null;
 
+  if (response.status === 401 && !retried && shouldRetryAuth(path)) {
+    const refreshed = await tryRefreshSession();
+    if (refreshed) {
+      return apiFetch<T>(path, init, true);
+    }
+  }
+
   if (!response.ok) {
     throw new ApiError(data?.message ?? "Request failed.", response.status);
   }
 
   return data as T;
+}
+
+export async function refreshSession(): Promise<boolean> {
+  return tryRefreshSession();
 }

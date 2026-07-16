@@ -420,11 +420,11 @@ export function SplitsSection({ refreshKey = 0, onChanged, embedded = true }: Pr
             <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 14 }}>You paid — flatmates owe you their share</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <div><FieldLabel>Description</FieldLabel><input className="cream-input" value={addSplit.description} onChange={(e) => setAddSplit({ ...addSplit, description: e.target.value })} placeholder="Wifi, groceries..." /></div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div className="form-grid-2">
                 <div><FieldLabel>Total paid (₹)</FieldLabel><input className="cream-input" type="number" value={addSplit.amount} onChange={(e) => setAddSplit({ ...addSplit, amount: e.target.value })} /></div>
                 <div><FieldLabel>Date</FieldLabel><CreamDatePicker value={addSplit.date} onChange={(date) => setAddSplit({ ...addSplit, date })} /></div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div className="form-grid-2">
                 <div><FieldLabel>Category</FieldLabel><CreamSelect value={addSplit.category} onChange={(category) => setAddSplit({ ...addSplit, category })} options={CATEGORIES} /></div>
                 <div><FieldLabel>Payment</FieldLabel><CreamSelect value={addSplit.paymentMode} onChange={(paymentMode) => setAddSplit({ ...addSplit, paymentMode })} options={PAYMENT_MODES} /></div>
               </div>
@@ -464,7 +464,7 @@ export function SplitsSection({ refreshKey = 0, onChanged, embedded = true }: Pr
                 />
               </div>
               <div><FieldLabel>Description</FieldLabel><input className="cream-input" value={theyPaid.description} onChange={(e) => setTheyPaid({ ...theyPaid, description: e.target.value })} placeholder="Groceries, dinner..." /></div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div className="form-grid-2">
                 <div><FieldLabel>Total (₹)</FieldLabel><input className="cream-input" type="number" value={theyPaid.amount} onChange={(e) => setTheyPaid({ ...theyPaid, amount: e.target.value })} /></div>
                 <div><FieldLabel>Date</FieldLabel><CreamDatePicker value={theyPaid.date} onChange={(date) => setTheyPaid({ ...theyPaid, date })} /></div>
               </div>
@@ -603,7 +603,7 @@ export function SplitsSection({ refreshKey = 0, onChanged, embedded = true }: Pr
       )}
 
       {/* Add flatmate — bottom corner */}
-      <div style={{ position: "absolute", bottom: 16, right: 16, zIndex: 2 }}>
+      <div className="splits-fab">
         {showAddFlatmate ? (
           <div style={{
             background: "var(--card)",

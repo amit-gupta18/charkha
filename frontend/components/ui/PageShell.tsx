@@ -13,22 +13,20 @@ type PageShellProps = {
 
 export function PageShell({ title, subtitle, badge, actions, children, maxWidth = 960 }: PageShellProps) {
   return (
-    <div style={{ padding: "28px 32px", maxWidth, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 28, gap: 16, flexWrap: "wrap" }}>
+    <div className="page-shell" style={{ maxWidth }}>
+      <div className="page-shell-header">
         <div>
-          {subtitle && (
-            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              {subtitle}
-            </p>
-          )}
-          <h1 style={{ fontSize: "1.6rem", fontWeight: 700, color: "var(--text-primary)", margin: subtitle ? "4px 0 0" : 0 }}>
+          {subtitle && <p className="page-shell-kicker">{subtitle}</p>}
+          <h1 className="page-shell-title" style={{ margin: subtitle ? undefined : 0 }}>
             {title}
           </h1>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {badge}
-          {actions}
-        </div>
+        {(badge || actions) && (
+          <div className="page-shell-actions">
+            {badge}
+            {actions}
+          </div>
+        )}
       </div>
       {children}
     </div>
@@ -49,7 +47,7 @@ export function PageCard({ children, style, id }: { children: ReactNode; style?:
 
 export function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
       <p style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text-primary)" }}>{children}</p>
       {action}
     </div>

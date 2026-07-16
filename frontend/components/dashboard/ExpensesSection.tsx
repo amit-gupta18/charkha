@@ -104,37 +104,72 @@ export function ExpensesSection({ refreshKey = 0, onChanged, embedded = true }: 
       ) : filtered.length === 0 ? (
         <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center", padding: "24px 0" }}>No expenses match your filters.</p>
       ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Date</th><th>Description</th><th>Category</th><th>Type</th><th>Mode</th>
-                <th style={{ textAlign: "right" }}>Amount</th><th style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((e) => (
-                <tr key={e.id}>
-                  <td>{new Date(e.date).toLocaleDateString("en-IN")}</td>
-                  <td style={{ color: "var(--text-primary)", fontWeight: 500 }}>{e.description}</td>
-                  <td>{e.category}</td>
-                  <td><span style={{ color: typeColor(e.type), fontWeight: 700, fontSize: "0.75rem" }}>{e.type}</span></td>
-                  <td>{e.paymentMode}</td>
-                  <td className="amount">
-                    {inr(expenseShare(e), 2)}
-                    {e.isSplit && e.amount !== expenseShare(e) && (
-                      <span style={{ display: "block", fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 500 }}>Split · paid {inr(e.amount, 2)}</span>
-                    )}
-                  </td>
-                  <td className="actions">
-                    <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: "0.78rem" }} onClick={() => edit(e)}>Edit</button>
-                    <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: "0.78rem", color: "var(--red)", marginLeft: 4 }} onClick={() => remove(e.id)}>Delete</button>
-                  </td>
+        <>
+          <div className="data-table-desktop" style={{ overflowX: "auto" }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th><th>Description</th><th>Category</th><th>Type</th><th>Mode</th>
+                  <th style={{ textAlign: "right" }}>Amount</th><th style={{ textAlign: "right" }}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filtered.map((e) => (
+                  <tr key={e.id}>
+                    <td>{new Date(e.date).toLocaleDateString("en-IN")}</td>
+                    <td style={{ color: "var(--text-primary)", fontWeight: 500 }}>{e.description}</td>
+                    <td>{e.category}</td>
+                    <td><span style={{ color: typeColor(e.type), fontWeight: 700, fontSize: "0.75rem" }}>{e.type}</span></td>
+                    <td>{e.paymentMode}</td>
+                    <td className="amount">
+                      {inr(expenseShare(e), 2)}
+                      {e.isSplit && e.amount !== expenseShare(e) && (
+                        <span style={{ display: "block", fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 500 }}>Split · paid {inr(e.amount, 2)}</span>
+                      )}
+                    </td>
+                    <td className="actions">
+                      <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: "0.78rem" }} onClick={() => edit(e)}>Edit</button>
+                      <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: "0.78rem", color: "var(--red)", marginLeft: 4 }} onClick={() => remove(e.id)}>Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="data-table-mobile">
+            {filtered.map((e) => (
+              <div key={e.id} className="data-card">
+                <div className="data-card-row">
+                  <div>
+                    <p style={{ fontWeight: 600, fontSize: "0.9rem", color: "var(--text-primary)" }}>{e.description}</p>
+                    <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 2 }}>
+                      {new Date(e.date).toLocaleDateString("en-IN")} · {e.category}
+                    </p>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <p style={{ fontWeight: 700, fontSize: "0.95rem" }}>{inr(expenseShare(e), 2)}</p>
+                    <span style={{ color: typeColor(e.type), fontWeight: 700, fontSize: "0.72rem" }}>{e.type}</span>
+                  </div>
+                </div>
+                <div className="data-card-row">
+                  <span className="data-card-label">Payment</span>
+                  <span className="data-card-value">{e.paymentMode}</span>
+                </div>
+                {e.isSplit && e.amount !== expenseShare(e) && (
+                  <div className="data-card-row">
+                    <span className="data-card-label">Paid total</span>
+                    <span className="data-card-value">{inr(e.amount, 2)}</span>
+                  </div>
+                )}
+                <div className="data-card-actions">
+                  <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: "0.78rem", flex: 1 }} onClick={() => edit(e)}>Edit</button>
+                  <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: "0.78rem", color: "var(--red)", flex: 1 }} onClick={() => remove(e.id)}>Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </PageCard>
   );

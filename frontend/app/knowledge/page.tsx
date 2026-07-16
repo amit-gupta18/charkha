@@ -49,7 +49,7 @@ export default function KnowledgePage() {
         <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: 16, lineHeight: 1.5 }}>
           Save what you learn about money. Each note earns <strong>10 coins</strong>. Want spending costs coins — keep learning to stay ahead.
         </p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div className="form-grid-2">
           <div><FieldLabel>Search</FieldLabel><input className="cream-input" placeholder="Search notes..." value={search} onChange={(e) => setSearch(e.target.value)} /></div>
           <div><FieldLabel>Topic</FieldLabel>
             <CreamSelect value={topic} onChange={setTopic} placeholder="All topics" options={KNOWLEDGE_TOPICS} />

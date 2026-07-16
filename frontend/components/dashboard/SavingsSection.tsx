@@ -137,8 +137,7 @@ export function SavingsSection({ refreshKey = 0, onChanged, embedded = true }: P
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {entries.map((e, idx) => (
-            <div key={e.id} style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+            <div key={e.id} className="list-row" style={{
               padding: "11px 0",
               borderBottom: idx < entries.length - 1 ? "1px solid var(--border-light)" : "none",
             }}>
@@ -151,7 +150,7 @@ export function SavingsSection({ refreshKey = 0, onChanged, embedded = true }: P
                   {e.reason ? ` · ${e.reason}` : ""}
                 </p>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              <div className="list-row-actions" style={{ flexShrink: 0 }}>
                 <span className={`badge ${e.status === "active" ? "badge-green" : "badge-blue"}`}>{e.status}</span>
                 <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>{inr(e.amount)}</span>
                 <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: "0.78rem" }} onClick={() => toggleWithdrawn(e)}>

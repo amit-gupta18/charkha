@@ -69,7 +69,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
       subtitle="Knowledge"
       badge={<span className="badge badge-blue">{note.topic}</span>}
       actions={
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="page-shell-actions">
           <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: "0.85rem" }} onClick={() => router.push("/knowledge")}>← Back</button>
           {!editing && <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: "0.85rem" }} onClick={() => setEditing(true)}>Edit</button>}
           <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: "0.85rem", color: "var(--red)" }} onClick={remove}>Delete</button>
@@ -83,7 +83,7 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div><FieldLabel>Title</FieldLabel><input className="cream-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
             <div><FieldLabel>Source URL</FieldLabel><input className="cream-input" value={form.sourceUrl} onChange={(e) => setForm({ ...form, sourceUrl: e.target.value })} /></div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div className="form-grid-2">
               <CreamSelect value={form.sourceType} onChange={(sourceType) => setForm({ ...form, sourceType })} options={KNOWLEDGE_SOURCE_TYPES} />
               <CreamSelect value={form.topic} onChange={(topic) => setForm({ ...form, topic })} options={KNOWLEDGE_TOPICS} />
             </div>

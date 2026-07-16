@@ -92,8 +92,7 @@ export function IncomeSection({ refreshKey = 0, onChanged, embedded = true }: Pr
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           {incomes.map((i, idx) => (
-            <div key={i.id} style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
+            <div key={i.id} className="list-row" style={{
               padding: "11px 0",
               borderBottom: idx < incomes.length - 1 ? "1px solid var(--border-light)" : "none",
             }}>
@@ -103,7 +102,7 @@ export function IncomeSection({ refreshKey = 0, onChanged, embedded = true }: Pr
                   {new Date(i.date).toLocaleDateString("en-IN")}{i.notes ? ` · ${i.notes}` : ""}
                 </p>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div className="list-row-actions">
                 <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--green)" }}>{inr(i.amount)}</span>
                 <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: "0.78rem", color: "var(--red)" }} onClick={() => remove(i.id)}>Delete</button>
               </div>

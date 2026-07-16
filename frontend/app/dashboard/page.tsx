@@ -87,8 +87,8 @@ function BalanceCard({
             {isCurrentMonth ? "Current balance" : "Month closing"} · {monthLabel}
           </p>
           <p
-            className={flash ? "animate-count-up" : ""}
-            style={{ fontSize: "2.75rem", fontWeight: 800, color: low ? "var(--red)" : "var(--text-primary)", lineHeight: 1, letterSpacing: "-0.02em" }}
+            className={`balance-amount${flash ? " animate-count-up" : ""}`}
+            style={{ color: low ? "var(--red)" : "var(--text-primary)" }}
           >
             {inr(displayBalance)}
           </p>
@@ -234,14 +234,14 @@ function ConfirmCard({
 
   return (
     <div className="animate-fade-up" style={{ background: "var(--card)", border: "1.5px solid var(--accent)", borderRadius: "var(--radius-card)", padding: "20px 24px", boxShadow: "var(--shadow-lg)", marginTop: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+      <div className="confirm-card-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <p style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text-primary)" }}>{INTENT_LABELS[intent] ?? intent}</p>
         <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Say &quot;confirm&quot; or &quot;cancel&quot;</span>
       </div>
 
       {(intent === "expense" || intent === "split_expense") && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div className="form-grid-2">
             <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>DESCRIPTION</p><input className="cream-input" value={expenseForm.description} onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))} /></div>
             <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>TOTAL PAID (₹)</p><input className="cream-input" type="number" value={expenseForm.amount} onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value }))} /></div>
             <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>CATEGORY</p><CreamSelect value={expenseForm.category} onChange={category => setExpenseForm(f => ({ ...f, category }))} options={CATEGORIES} /></div>
@@ -277,7 +277,7 @@ function ConfirmCard({
       )}
 
       {intent === "income" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div className="form-grid-2">
           <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>AMOUNT (₹)</p><input className="cream-input" type="number" value={incomeForm.amount} onChange={e => setIncomeForm(f => ({ ...f, amount: e.target.value }))} /></div>
           <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>SOURCE</p><CreamSelect value={incomeForm.source} onChange={source => setIncomeForm(f => ({ ...f, source }))} options={INCOME_SOURCES} /></div>
           <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>DATE</p><CreamDatePicker value={incomeForm.date} onChange={date => setIncomeForm(f => ({ ...f, date }))} /></div>
@@ -285,7 +285,7 @@ function ConfirmCard({
       )}
 
       {intent === "lending" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div className="form-grid-2">
           <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>PERSON</p><input className="cream-input" value={lendingForm.personName} onChange={e => setLendingForm(f => ({ ...f, personName: e.target.value }))} /></div>
           <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>AMOUNT (₹)</p><input className="cream-input" type="number" value={lendingForm.amount} onChange={e => setLendingForm(f => ({ ...f, amount: e.target.value }))} /></div>
           <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>REASON</p><input className="cream-input" value={lendingForm.reason} onChange={e => setLendingForm(f => ({ ...f, reason: e.target.value }))} /></div>
@@ -294,7 +294,7 @@ function ConfirmCard({
       )}
 
       {intent === "savings" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div className="form-grid-2">
           <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>TYPE</p>
             <CreamSelect value={savingsForm.kind} onChange={kind => setSavingsForm(f => ({ ...f, kind }))} options={[{ value: "invested", label: "Invested" }, { value: "saved", label: "Saved for later" }]} />
           </div>
@@ -308,7 +308,7 @@ function ConfirmCard({
       )}
 
       {intent === "split_clear" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div className="form-grid-2">
           <div><p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 3 }}>FLATMATE</p>
             <CreamSelect value={clearForm.flatmateId} onChange={flatmateId => setClearForm(f => ({ ...f, flatmateId }))} options={flatmates.map(f => ({ value: f.id, label: f.name }))} />
           </div>
@@ -318,9 +318,9 @@ function ConfirmCard({
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+      <div className="confirm-actions">
         <button className="btn-ghost" onClick={onCancel} disabled={saving} style={{ flex: "0 0 auto", padding: "8px 20px" }}>Cancel</button>
-        <button className="btn-accent" onClick={onConfirm} disabled={saving} style={{ flex: 1 }}>
+        <button className="btn-accent" onClick={onConfirm} disabled={saving}>
           {saving ? "Saving..." : `✓ Confirm ${inr(confirmAmt)}`}
         </button>
       </div>
@@ -731,15 +731,15 @@ export default function Home() {
 
   return (
     <div className="dashboard-page">
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+      <div className="dashboard-head">
         <div>
           <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em" }}>Dashboard</p>
           <h1 style={{ fontSize: "1.6rem", fontWeight: 700, color: "var(--text-primary)", margin: "4px 0 0" }}>
             Welcome back, {user.name.split(" ")[0]} 👋
           </h1>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ minWidth: 180 }}>
+        <div className="dashboard-head-actions">
+          <div className="dashboard-month-picker">
             <p style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>View month</p>
             <CreamMonthPicker value={selectedMonth} onChange={setSelectedMonth} monthsBack={36} />
           </div>
@@ -776,7 +776,7 @@ export default function Home() {
           <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>
             🤖 Voice logger
           </p>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <div className="voice-logger-row">
             <button className={`mic-btn${listening ? " active" : ""}`} onClick={toggleMic} title={listening ? "Stop" : "Speak"}>🎤</button>
             <input
               className="cream-input"

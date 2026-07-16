@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { SignupForm } from "@/components/auth/SignupForm";
+import { AuthEntryGate } from "@/components/auth/AuthEntryGate";
 
 export default function SignupPage() {
   return (
-    <div style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-      <div style={{ background: "var(--cream)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: "60px 48px" }}>
-        <div style={{ maxWidth: 380, width: "100%" }}>
+    <AuthEntryGate>
+    <div className="auth-split">
+      <div className="auth-split-brand">
+        <div className="auth-split-inner">
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 48 }}>
             <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem" }}>🎤</div>
             <span style={{ fontWeight: 700, fontSize: "1rem", color: "var(--text-primary)" }}>Expense Tracker</span>
@@ -24,8 +26,8 @@ export default function SignupPage() {
         </div>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: "60px 48px", background: "var(--surface)" }}>
-        <div style={{ width: "100%", maxWidth: 380 }}>
+      <div className="auth-split-form">
+        <div className="auth-split-inner">
           <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--text-primary)", marginBottom: 6 }}>Create account</h1>
           <p style={{ fontSize: "0.875rem", color: "var(--text-muted)", marginBottom: 28 }}>Free for personal use. No credit card.</p>
           <SignupForm />
@@ -36,5 +38,6 @@ export default function SignupPage() {
         </div>
       </div>
     </div>
+    </AuthEntryGate>
   );
 }

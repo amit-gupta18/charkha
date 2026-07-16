@@ -2,6 +2,8 @@
 
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
+import { MobileNav } from "@/components/MobileNav";
+import { MobileHeader } from "@/components/MobileHeader";
 
 const PUBLIC_PATHS = new Set(["/", "/login", "/signup"]);
 
@@ -12,7 +14,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell">
       {!isPublic && <Sidebar />}
-      <main className={isPublic ? "app-main-public" : "app-main"}>{children}</main>
+      <div className={isPublic ? "app-main-public" : "app-main-column"}>
+        {!isPublic && <MobileHeader />}
+        <main className={isPublic ? "app-main-public" : "app-main"}>{children}</main>
+      </div>
+      {!isPublic && <MobileNav />}
     </div>
   );
 }

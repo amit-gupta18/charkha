@@ -107,8 +107,7 @@ export function LendingSection({ refreshKey = 0, onChanged, embedded = true }: P
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           {lendings.map((l, idx) => (
-            <div key={l.id} style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
+            <div key={l.id} className="list-row" style={{
               padding: "11px 0",
               borderBottom: idx < lendings.length - 1 ? "1px solid var(--border-light)" : "none",
             }}>
@@ -118,7 +117,7 @@ export function LendingSection({ refreshKey = 0, onChanged, embedded = true }: P
                   {new Date(l.date).toLocaleDateString("en-IN")}{l.reason ? ` · ${l.reason}` : ""}
                 </p>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div className="list-row-actions">
                 <span className={`badge ${l.status === "settled" ? "badge-green" : "badge-orange"}`}>{l.status}</span>
                 <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>{inr(l.amount)}</span>
                 <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: "0.78rem" }} onClick={() => toggleStatus(l)}>

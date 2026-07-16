@@ -43,7 +43,7 @@ export default function NewKnowledgePage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div><FieldLabel>Title</FieldLabel><input className="cream-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="What did you learn?" /></div>
           <div><FieldLabel>Source URL</FieldLabel><input className="cream-input" value={form.sourceUrl} onChange={(e) => setForm({ ...form, sourceUrl: e.target.value })} placeholder="YouTube, article link..." /></div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div className="form-grid-2">
             <div><FieldLabel>Source Type</FieldLabel>
               <CreamSelect value={form.sourceType} onChange={(sourceType) => setForm({ ...form, sourceType })} options={KNOWLEDGE_SOURCE_TYPES} />
             </div>

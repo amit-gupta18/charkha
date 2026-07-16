@@ -81,7 +81,7 @@ export default function SettingsPage() {
 
           <div style={{ borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 12 }}>Budget split (must total 1.0)</p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+            <div className="form-grid-3">
               <PctField label="Need" value={s.needsPct} onChange={(v) => update({ needsPct: v })} />
               <PctField label="Want" value={s.wantsPct} onChange={(v) => update({ wantsPct: v })} />
               <PctField label="Saving target" value={s.savingsPct} onChange={(v) => update({ savingsPct: v })} />

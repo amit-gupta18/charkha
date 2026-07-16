@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { apiFetch } from "@/lib/api";
+import { broadcastAuthEvent } from "@/lib/sessionSync";
 import type { AuthResponse } from "@/lib/types";
 import { Alert, FieldLabel } from "@/components/ui/PageShell";
 
@@ -27,6 +28,7 @@ export function LoginForm() {
       });
 
       setUser(data.user);
+      broadcastAuthEvent("login");
       router.replace("/dashboard");
       router.refresh();
     } catch (submitError) {

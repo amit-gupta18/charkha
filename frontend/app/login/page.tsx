@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { AuthEntryGate } from "@/components/auth/AuthEntryGate";
 
 export default function LoginPage() {
   return (
-    <div style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-      {/* ── Left panel — branding ── */}
-      <div style={{ background: "var(--cream)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: "60px 48px" }}>
-        <div style={{ maxWidth: 380, width: "100%" }}>
+    <AuthEntryGate>
+    <div className="auth-split">
+      <div className="auth-split-brand">
+        <div className="auth-split-inner">
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 48 }}>
             <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem" }}>🎤</div>
             <span style={{ fontWeight: 700, fontSize: "1rem", color: "var(--text-primary)" }}>Expense Tracker</span>
@@ -18,16 +19,15 @@ export default function LoginPage() {
             Just speak your expense. Your AI agent parses it, you confirm. No forms, no friction.
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {["🎤 Voice logging — just say it", "📊 Need / Want / Saving split", "🪙 Coin system to stay sharp"].map(f => (
+            {["🎤 Voice logging — just say it", "📊 Need / Want / Saving split", "🪙 Coin system to stay sharp"].map((f) => (
               <div key={f} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "0.875rem", color: "var(--text-secondary)", fontWeight: 500 }}>{f}</div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* ── Right panel — form ── */}
-      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: "60px 48px", background: "var(--surface)" }}>
-        <div style={{ width: "100%", maxWidth: 380 }}>
+      <div className="auth-split-form">
+        <div className="auth-split-inner">
           <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--text-primary)", marginBottom: 6 }}>Welcome back</h1>
           <p style={{ fontSize: "0.875rem", color: "var(--text-muted)", marginBottom: 28 }}>Use your email and password to continue.</p>
           <LoginForm />
@@ -38,5 +38,6 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+    </AuthEntryGate>
   );
 }
