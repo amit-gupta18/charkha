@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from "@/components/providers/AuthProvider";
+import { useAuth } from "@/stores/auth";
 import { PageLoading } from "@/components/ui/PageShell";
 
 export function AuthEntryGate({ children }: { children: React.ReactNode }) {

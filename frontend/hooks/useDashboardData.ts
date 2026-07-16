@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from "@/components/providers/AuthProvider";
+import { useAuthStore } from "@/stores/auth";
 import {
   useDashboardQuery,
   useExpensesQuery,
@@ -11,7 +11,8 @@ import {
 } from "@/lib/query/hooks";
 
 export function useAuthQueryEnabled() {
-  const { isLoading: authLoading, user } = useAuth();
+  const authLoading = useAuthStore((s) => s.isLoading);
+  const user = useAuthStore((s) => s.user);
   return !authLoading && !!user;
 }
 

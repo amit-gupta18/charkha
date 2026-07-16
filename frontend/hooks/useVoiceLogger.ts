@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { assertAuthenticated, withAuthGuard } from "@/lib/auth-guard";
 import { apiFetch, ApiError } from "@/lib/api";
 import { CATEGORIES, INCOME_SOURCES, PAYMENT_MODES, SAVINGS_DESTINATIONS } from "@/lib/constants";
 import { inr, today } from "@/lib/format";
@@ -40,12 +41,13 @@ export function useVoiceLogger(flatmates: Flatmate[]) {
   }, [store]);
 
   const parseMutation = useMutation({
-    mutationFn: (text: string) => apiFetch<ParsedIntent>("/api/parse", { method: "POST", body: JSON.stringify({ text }) }),
+    mutationFn: withAuthGuard((text: string) =>
+      apiFetch<ParsedIntent>("/api/parse", { method: "POST", body: JSON.stringify({ text }) })),
     onMutate: () => {
       store.setAgentError(null);
       store.setAppState("PARSING");
     },
-    onSuccess: (res) => {
+    onSuccess: (res: ParsedIntent) => {
       store.setIntentData(res);
       if (res.intent === "expense") {
         fillExpenseForm(res.data);
@@ -110,6 +112,7 @@ export function useVoiceLogger(flatmates: Flatmate[]) {
 
   const confirmMutation = useMutation({
     mutationFn: async () => {
+      assertAuthenticated();
       const intentData = useVoiceLoggerStore.getState().intentData;
       if (!intentData) return;
 

@@ -2,16 +2,15 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/components/providers/AuthProvider";
 import { apiFetch } from "@/lib/api";
-import { queryClient } from "@/lib/query/client";
 import { broadcastAuthEvent } from "@/lib/sessionSync";
+import { useAuthStore } from "@/stores/auth";
 import type { AuthResponse } from "@/lib/types";
 import { Alert, FieldLabel } from "@/components/ui/PageShell";
 
 export function LoginForm() {
   const router = useRouter();
-  const { setUser } = useAuth();
+  const completeLogin = useAuthStore((s) => s.completeLogin);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -23,16 +22,12 @@ export function LoginForm() {
     setIsSubmitting(true);
 
     try {
-      const data = await apiFetch<AuthResponse>("/api/auth/login", {
+      await apiFetch<AuthResponse>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
 
-      // Confirm cookies were stored before enabling authenticated queries.
-      await apiFetch<AuthResponse>("/api/auth/me");
-
-      setUser(data.user);
-      await queryClient.invalidateQueries();
+      await completeLogin();
       broadcastAuthEvent("login");
       router.replace("/dashboard");
       router.refresh();

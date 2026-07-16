@@ -2,16 +2,15 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/components/providers/AuthProvider";
+import { useAuthStore } from "@/stores/auth";
 import { apiFetch } from "@/lib/api";
-import { queryClient } from "@/lib/query/client";
 import { broadcastAuthEvent } from "@/lib/sessionSync";
 import type { AuthResponse } from "@/lib/types";
 import { Alert, FieldLabel } from "@/components/ui/PageShell";
 
 export function SignupForm() {
   const router = useRouter();
-  const { setUser } = useAuth();
+  const completeLogin = useAuthStore((s) => s.completeLogin);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,15 +23,12 @@ export function SignupForm() {
     setIsSubmitting(true);
 
     try {
-      const data = await apiFetch<AuthResponse>("/api/auth/register", {
+      await apiFetch<AuthResponse>("/api/auth/register", {
         method: "POST",
         body: JSON.stringify({ name, email, password }),
       });
 
-      await apiFetch<AuthResponse>("/api/auth/me");
-
-      setUser(data.user);
-      await queryClient.invalidateQueries();
+      await completeLogin();
       broadcastAuthEvent("login");
       router.replace("/dashboard");
       router.refresh();

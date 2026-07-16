@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { AuthProvider } from "@/components/providers/AuthProvider";
+import { AuthBootstrap } from "@/components/AuthBootstrap";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { AppShell } from "@/components/AppShell";
 
@@ -19,11 +19,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" className="h-full">
       <body className="h-full" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>
-        <AuthProvider>
-          <QueryProvider>
-            <AppShell>{children}</AppShell>
-          </QueryProvider>
-        </AuthProvider>
+        <QueryProvider>
+          <AuthBootstrap />
+          <AppShell>{children}</AppShell>
+        </QueryProvider>
       </body>
     </html>
   );

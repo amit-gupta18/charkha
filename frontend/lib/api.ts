@@ -61,6 +61,8 @@ export async function apiFetch<T>(path: string, init?: RequestInit, retried = fa
     if (refreshed) {
       return apiFetch<T>(path, init, true);
     }
+    const { useAuthStore } = await import("@/stores/auth");
+    useAuthStore.getState().handleSessionLost();
   }
 
   if (!response.ok) {

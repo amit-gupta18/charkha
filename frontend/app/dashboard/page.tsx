@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useAuth } from "@/components/providers/AuthProvider";
+import { useAuth } from "@/stores/auth";
 import { CATEGORIES, PAYMENT_MODES, INCOME_SOURCES, SAVINGS_DESTINATIONS } from "@/lib/constants";
 import { expenseShare, inr } from "@/lib/format";
 import type { Flatmate } from "@/lib/types";
