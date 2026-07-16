@@ -1,38 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { useState } from "react";
+import { ApiError } from "@/lib/api";
 import { SAVINGS_DESTINATIONS, SAVINGS_KINDS } from "@/lib/constants";
+import type { SavingsDestination, SavingsKind } from "@/lib/constants";
 import { inr, today } from "@/lib/format";
+import {
+  useCreateSavingsMutation,
+  useDeleteSavingsMutation,
+  useSavingsQuery,
+  useUpdateSavingsMutation,
+} from "@/lib/query/hooks";
+import { useAuthQueryEnabled } from "@/hooks/useDashboardData";
 import type { Saving } from "@/lib/types";
 import { Alert, FieldLabel, PageCard, SectionTitle } from "@/components/ui/PageShell";
 import { CreamDatePicker } from "@/components/ui/CreamDatePicker";
 import { CreamSelect } from "@/components/ui/CreamSelect";
 
-type Props = { refreshKey?: number; onChanged?: () => void; embedded?: boolean };
+type Props = { embedded?: boolean };
 
-export function SavingsSection({ refreshKey = 0, onChanged, embedded = true }: Props) {
-  const [entries, setEntries] = useState<Saving[]>([]);
-  const [loading, setLoading] = useState(true);
+export function SavingsSection({ embedded = true }: Props) {
+  const enabled = useAuthQueryEnabled();
+  const { data: entries = [], isLoading } = useSavingsQuery(enabled);
+  const createMutation = useCreateSavingsMutation();
+  const updateMutation = useUpdateSavingsMutation();
+  const deleteMutation = useDeleteSavingsMutation();
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState<{ date: string; kind: string; amount: string; destination: string; reason: string }>({
+  const [form, setForm] = useState<{
+    date: string;
+    kind: SavingsKind;
+    amount: string;
+    destination: SavingsDestination;
+    reason: string;
+  }>({
     date: today(),
     kind: SAVINGS_KINDS[0],
     amount: "",
     destination: SAVINGS_DESTINATIONS[0],
     reason: "",
   });
-  const [saving, setSaving] = useState(false);
-
-  const load = () => {
-    setLoading(true);
-    apiFetch<{ savings: Saving[] }>("/api/savings")
-      .then((d) => setEntries(d.savings))
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load savings."))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(load, [refreshKey]);
 
   const totalActive = entries.filter((e) => e.status === "active").reduce((s, e) => s + e.amount, 0);
   const totalInvested = entries.filter((e) => e.status === "active" && e.kind === "invested").reduce((s, e) => s + e.amount, 0);
@@ -44,38 +50,26 @@ export function SavingsSection({ refreshKey = 0, onChanged, embedded = true }: P
       setError("Enter a valid amount.");
       return;
     }
-    setSaving(true);
     setError(null);
     try {
-      await apiFetch("/api/savings", {
-        method: "POST",
-        body: JSON.stringify({
-          date: form.date || today(),
-          kind: form.kind,
-          amount,
-          destination: form.destination,
-          reason: form.reason.trim(),
-        }),
+      await createMutation.mutateAsync({
+        date: form.date || today(),
+        kind: form.kind,
+        amount,
+        destination: form.destination,
+        reason: form.reason.trim(),
       });
       setForm({ date: today(), kind: form.kind, amount: "", destination: form.destination, reason: "" });
-      load();
-      onChanged?.();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to log savings.");
-    } finally {
-      setSaving(false);
     }
   }
 
   async function toggleWithdrawn(entry: Saving) {
     const next = entry.status === "active" ? "withdrawn" : "active";
+    setError(null);
     try {
-      await apiFetch(`/api/savings/${entry.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ status: next }),
-      });
-      load();
-      onChanged?.();
+      await updateMutation.mutateAsync({ id: entry.id, body: { status: next } });
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Update failed.");
     }
@@ -83,10 +77,9 @@ export function SavingsSection({ refreshKey = 0, onChanged, embedded = true }: P
 
   async function remove(id: string) {
     if (!confirm("Delete this savings entry?")) return;
+    setError(null);
     try {
-      await apiFetch(`/api/savings/${id}`, { method: "DELETE" });
-      load();
-      onChanged?.();
+      await deleteMutation.mutateAsync(id);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Delete failed.");
     }
@@ -112,7 +105,7 @@ export function SavingsSection({ refreshKey = 0, onChanged, embedded = true }: P
           <FieldLabel>Type</FieldLabel>
           <CreamSelect
             value={form.kind}
-            onChange={(kind) => setForm({ ...form, kind })}
+            onChange={(kind) => setForm({ ...form, kind: kind as SavingsKind })}
             options={[
               { value: "invested", label: "Invested" },
               { value: "saved", label: "Saved for later" },
@@ -122,15 +115,15 @@ export function SavingsSection({ refreshKey = 0, onChanged, embedded = true }: P
         <div><FieldLabel>Amount (₹)</FieldLabel><input className="cream-input" type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></div>
         <div>
           <FieldLabel>Where</FieldLabel>
-          <CreamSelect value={form.destination} onChange={(destination) => setForm({ ...form, destination })} options={SAVINGS_DESTINATIONS} />
+          <CreamSelect value={form.destination} onChange={(destination) => setForm({ ...form, destination: destination as SavingsDestination })} options={SAVINGS_DESTINATIONS} />
         </div>
         <div><FieldLabel>Note</FieldLabel><input className="cream-input" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="HDFC SIP, emergency jar..." /></div>
       </div>
-      <button className="btn-accent" onClick={submit} disabled={saving} style={{ width: "100%", marginBottom: 16 }}>
-        {saving ? "Saving..." : "Log savings / investment"}
+      <button className="btn-accent" onClick={submit} disabled={createMutation.isPending} style={{ width: "100%", marginBottom: 16 }}>
+        {createMutation.isPending ? "Saving..." : "Log savings / investment"}
       </button>
 
-      {loading ? (
+      {isLoading ? (
         <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>Loading...</p>
       ) : entries.length === 0 ? (
         <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>No savings logged yet.</p>

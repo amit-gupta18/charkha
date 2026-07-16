@@ -1,15 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { ApiError } from "@/lib/api";
 import { CATEGORIES, PAYMENT_MODES } from "@/lib/constants";
 import { inr, today } from "@/lib/format";
-import type { Flatmate, PlateBalance, SplitRecord, SplitSettlement } from "@/lib/types";
+import {
+  useCreateFlatmateMutation,
+  useCreateSplitBillMutation,
+  useCreateSplitSettlementMutation,
+  useDeleteFlatmateMutation,
+  useDeleteSplitSettlementMutation,
+  useFlatmatesQuery,
+  useSettleSplitMemberMutation,
+  useSplitPlateQuery,
+  useSplitsQuery,
+  useSplitSettlementsQuery,
+} from "@/lib/query/hooks";
+import { useAuthQueryEnabled } from "@/hooks/useDashboardData";
+import type { Flatmate, PlateData, SplitRecord, SplitSettlement } from "@/lib/types";
 import { Alert, FieldLabel, PageCard, SectionTitle } from "@/components/ui/PageShell";
 import { CreamSelect } from "@/components/ui/CreamSelect";
 import { CreamDatePicker } from "@/components/ui/CreamDatePicker";
 
-type Props = { refreshKey?: number; onChanged?: () => void; embedded?: boolean };
+type Props = { embedded?: boolean };
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -129,14 +142,21 @@ function ShareEditor({
   );
 }
 
-export function SplitsSection({ refreshKey = 0, onChanged, embedded = true }: Props) {
-  const [flatmates, setFlatmates] = useState<Flatmate[]>([]);
-  const [splits, setSplits] = useState<SplitRecord[]>([]);
-  const [settlements, setSettlements] = useState<SplitSettlement[]>([]);
-  const [plate, setPlate] = useState<{ perFlatmate: PlateBalance[]; netTotal: number; totalReceivable: number; totalPayable: number } | null>(null);
-  const [loading, setLoading] = useState(true);
+export function SplitsSection({ embedded = true }: Props) {
+  const enabled = useAuthQueryEnabled();
+  const { data: flatmates = [], isLoading: flatmatesLoading } = useFlatmatesQuery(enabled);
+  const { data: splits = [], isLoading: splitsLoading } = useSplitsQuery(enabled);
+  const { data: settlements = [], isLoading: settlementsLoading } = useSplitSettlementsQuery(enabled);
+  const { data: plate = null, isLoading: plateLoading } = useSplitPlateQuery(enabled);
+  const createFlatmateMutation = useCreateFlatmateMutation();
+  const deleteFlatmateMutation = useDeleteFlatmateMutation();
+  const createBillMutation = useCreateSplitBillMutation();
+  const createSettlementMutation = useCreateSplitSettlementMutation();
+  const deleteSettlementMutation = useDeleteSplitSettlementMutation();
+  const settleMemberMutation = useSettleSplitMemberMutation();
+
+  const loading = flatmatesLoading || splitsLoading || settlementsLoading || plateLoading;
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [showAddFlatmate, setShowAddFlatmate] = useState(false);
   const [fmForm, setFmForm] = useState({ name: "", phone: "" });
 
@@ -155,27 +175,13 @@ export function SplitsSection({ refreshKey = 0, onChanged, embedded = true }: Pr
   });
 
   const allIds = useMemo(() => flatmates.map((f) => f.id), [flatmates]);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    Promise.all([
-      apiFetch<{ flatmates: Flatmate[] }>("/api/flatmates"),
-      apiFetch<{ splits: SplitRecord[] }>("/api/splits"),
-      apiFetch<{ settlements: SplitSettlement[] }>("/api/splits/settlements"),
-      apiFetch<{ perFlatmate: PlateBalance[]; netTotal: number; totalReceivable: number; totalPayable: number }>("/api/splits/plate"),
-    ])
-      .then(([fm, sp, st, pl]) => {
-        setFlatmates(fm.flatmates);
-        setSplits(sp.splits);
-        setSettlements(st.settlements);
-        setPlate(pl);
-      })
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load splits."))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => { load(); }, [refreshKey, load]);
+  const saving =
+    createFlatmateMutation.isPending ||
+    deleteFlatmateMutation.isPending ||
+    createBillMutation.isPending ||
+    createSettlementMutation.isPending ||
+    deleteSettlementMutation.isPending ||
+    settleMemberMutation.isPending;
 
   useEffect(() => {
     if (flatmates.length === 0) return;
@@ -228,30 +234,21 @@ export function SplitsSection({ refreshKey = 0, onChanged, embedded = true }: Pr
 
   async function addFlatmate() {
     if (!fmForm.name.trim()) return;
-    setSaving(true);
     setError(null);
     try {
-      await apiFetch("/api/flatmates", {
-        method: "POST",
-        body: JSON.stringify({ name: fmForm.name.trim(), phone: fmForm.phone.trim() }),
-      });
+      await createFlatmateMutation.mutateAsync({ name: fmForm.name.trim(), phone: fmForm.phone.trim() });
       setFmForm({ name: "", phone: "" });
       setShowAddFlatmate(false);
-      load();
-      onChanged?.();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to add flatmate.");
-    } finally {
-      setSaving(false);
     }
   }
 
   async function removeFlatmate(id: string) {
     if (!confirm("Remove this flatmate?")) return;
+    setError(null);
     try {
-      await apiFetch(`/api/flatmates/${id}`, { method: "DELETE" });
-      load();
-      onChanged?.();
+      await deleteFlatmateMutation.mutateAsync(id);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Delete failed.");
     }
@@ -273,33 +270,25 @@ export function SplitsSection({ refreshKey = 0, onChanged, embedded = true }: Pr
       return;
     }
 
-    setSaving(true);
     setError(null);
     try {
-      await apiFetch("/api/splits/bills", {
-        method: "POST",
-        body: JSON.stringify({
-          paidBy,
-          description: form.description.trim(),
-          totalAmount,
-          date: form.date || today(),
-          flatmateIds: form.selected,
-          shares: form.selected.map((id) => Number(form.shares[id]) || 0),
-          category: form.category,
-          paymentMode: form.paymentMode,
-        }),
+      await createBillMutation.mutateAsync({
+        paidBy,
+        description: form.description.trim(),
+        totalAmount,
+        date: form.date || today(),
+        flatmateIds: form.selected,
+        shares: form.selected.map((id) => Number(form.shares[id]) || 0),
+        category: form.category,
+        paymentMode: form.paymentMode,
       });
       if (paidBy === "user") {
         setAddSplit(defaultSplitForm(allIds));
       } else {
         setTheyPaid({ ...defaultSplitForm(allIds), paidByFlatmateId: theyPaid.paidByFlatmateId || flatmates[0]?.id || "" });
       }
-      load();
-      onChanged?.();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to save split.");
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -309,45 +298,35 @@ export function SplitsSection({ refreshKey = 0, onChanged, embedded = true }: Pr
       setError("Select flatmate and enter valid amount.");
       return;
     }
-    setSaving(true);
     setError(null);
     try {
-      await apiFetch("/api/splits/settlements", {
-        method: "POST",
-        body: JSON.stringify({
-          flatmateId: clearForm.flatmateId,
-          amount,
-          reason: clearForm.reason,
-          date: clearForm.date || today(),
-          direction: clearForm.direction,
-        }),
+      await createSettlementMutation.mutateAsync({
+        flatmateId: clearForm.flatmateId,
+        amount,
+        reason: clearForm.reason,
+        date: clearForm.date || today(),
+        direction: clearForm.direction,
       });
       setClearForm((f) => ({ ...f, amount: "", reason: "" }));
-      load();
-      onChanged?.();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to record payment.");
-    } finally {
-      setSaving(false);
     }
   }
 
   async function deleteSettlement(id: string) {
     if (!confirm("Reverse this entry?")) return;
+    setError(null);
     try {
-      await apiFetch(`/api/splits/settlements/${id}`, { method: "DELETE" });
-      load();
-      onChanged?.();
+      await deleteSettlementMutation.mutateAsync(id);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Delete failed.");
     }
   }
 
   async function settleMember(memberId: string) {
+    setError(null);
     try {
-      await apiFetch(`/api/splits/members/${memberId}/settle`, { method: "PATCH" });
-      load();
-      onChanged?.();
+      await settleMemberMutation.mutateAsync(memberId);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Settle failed.");
     }

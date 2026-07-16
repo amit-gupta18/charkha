@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { inr } from "@/lib/format";
 import type { Settings } from "@/lib/types";
+import { useSettingsQuery, useUpdateSettingsMutation } from "@/lib/query/hooks";
+import { useAuthQueryEnabled } from "@/hooks/useDashboardData";
 import { Alert, FieldLabel, PageCard, PageLoading, PageShell } from "@/components/ui/PageShell";
 
 const DEFAULTS: Settings = {
@@ -16,20 +18,19 @@ const DEFAULTS: Settings = {
 };
 
 export default function SettingsPage() {
+  const enabled = useAuthQueryEnabled();
+  const { data: fetchedSettings, isLoading, isError } = useSettingsQuery(enabled);
+  const updateMutation = useUpdateSettingsMutation();
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    apiFetch<{ settings: Settings }>("/api/settings")
-      .then((data) => setSettings(data.settings))
-      .catch(() => setSettings(DEFAULTS))
-      .finally(() => setLoading(false));
-  }, []);
+    if (fetchedSettings) setSettings(fetchedSettings);
+    else if (isError) setSettings(DEFAULTS);
+  }, [fetchedSettings, isError]);
 
-  if (loading) return <PageLoading message="Loading settings..." />;
+  if (isLoading && !settings) return <PageLoading message="Loading settings..." />;
 
   function update(patch: Partial<Settings>) {
     if (settings) setSettings({ ...settings, ...patch });
@@ -43,24 +44,18 @@ export default function SettingsPage() {
       setError(`Need + Want + Saving must sum to 1 (currently ${total.toFixed(2)}).`);
       return;
     }
-    setSaving(true);
     setError(null);
     setSaved(false);
     try {
-      const res = await apiFetch<{ settings: Settings }>("/api/settings", {
-        method: "PUT",
-        body: JSON.stringify(settings),
-      });
+      const res = await updateMutation.mutateAsync(settings);
       setSettings(res.settings);
       setSaved(true);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to save settings.");
-    } finally {
-      setSaving(false);
     }
   }
 
-  const s = settings!;
+  const s = settings ?? DEFAULTS;
   const total = s.needsPct + s.wantsPct + s.savingsPct;
   const totalOk = Math.abs(total - 1) <= 0.01;
 
@@ -95,8 +90,8 @@ export default function SettingsPage() {
             </p>
           </div>
 
-          <button className="btn-accent" onClick={save} disabled={saving || !totalOk} style={{ width: "100%" }}>
-            {saving ? "Saving..." : "Save settings"}
+          <button className="btn-accent" onClick={save} disabled={updateMutation.isPending || !totalOk} style={{ width: "100%" }}>
+            {updateMutation.isPending ? "Saving..." : "Save settings"}
           </button>
         </div>
       </PageCard>

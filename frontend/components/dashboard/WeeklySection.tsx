@@ -1,33 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { useMemo, useState } from "react";
 import { inr, isoWeekKey, expenseShare } from "@/lib/format";
-import type { Expense, Settings } from "@/lib/types";
+import { useExpensesQuery, useSettingsQuery } from "@/lib/query/hooks";
+import { useAuthQueryEnabled } from "@/hooks/useDashboardData";
+import type { Expense } from "@/lib/types";
 import { Alert, PageCard, SectionTitle } from "@/components/ui/PageShell";
 
-type Props = { refreshKey?: number; embedded?: boolean };
+type Props = { embedded?: boolean };
 
-export function WeeklySection({ refreshKey = 0, embedded = true }: Props) {
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function WeeklySection({ embedded = true }: Props) {
+  const enabled = useAuthQueryEnabled();
+  const { data: expenses = [], isLoading: expensesLoading } = useExpensesQuery(enabled);
+  const { data: settings, isLoading: settingsLoading } = useSettingsQuery(enabled);
   const [expandedWeek, setExpandedWeek] = useState<string | null>(null);
 
-  useEffect(() => {
-    Promise.all([
-      apiFetch<{ expenses: Expense[] }>("/api/expenses"),
-      apiFetch<{ settings: Settings }>("/api/settings").catch(() => null),
-    ])
-      .then(([exp, set]) => {
-        setExpenses(exp.expenses);
-        setSettings(set?.settings ?? null);
-      })
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load weekly data."))
-      .finally(() => setLoading(false));
-  }, [refreshKey]);
-
+  const loading = expensesLoading || settingsLoading;
   const limit = settings?.weeklyLimit ?? 2500;
 
   const weeks = useMemo(() => {
@@ -46,7 +34,7 @@ export function WeeklySection({ refreshKey = 0, embedded = true }: Props) {
           items.reduce<Record<string, number>>((acc, e) => {
             acc[e.category] = (acc[e.category] ?? 0) + expenseShare(e);
             return acc;
-          }, {})
+          }, {}),
         ).sort((a, b) => b[1] - a[1]),
       }))
       .sort((a, b) => (a.key < b.key ? 1 : -1))
@@ -62,7 +50,6 @@ export function WeeklySection({ refreshKey = 0, embedded = true }: Props) {
   return (
     <PageCard id={embedded ? "weekly" : undefined} style={embedded ? undefined : { marginBottom: 0 }}>
       {embedded && <SectionTitle>Weekly analysis</SectionTitle>}
-      {error && <Alert type="error">{error}</Alert>}
 
       {loading ? (
         <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>Loading...</p>

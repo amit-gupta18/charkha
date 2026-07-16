@@ -1,19 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { useMemo, useState } from "react";
+import { ApiError } from "@/lib/api";
 import { CATEGORIES, PAYMENT_MODES } from "@/lib/constants";
 import { inr, expenseShare } from "@/lib/format";
+import {
+  useDeleteExpenseMutation,
+  useExpensesQuery,
+  useUpdateExpenseMutation,
+} from "@/lib/query/hooks";
+import { useAuthQueryEnabled } from "@/hooks/useDashboardData";
 import type { Expense } from "@/lib/types";
 import { Alert, FieldLabel, PageCard, SectionTitle } from "@/components/ui/PageShell";
 import { CreamSelect } from "@/components/ui/CreamSelect";
 import { CreamDatePicker } from "@/components/ui/CreamDatePicker";
 
-type Props = { refreshKey?: number; onChanged?: () => void; embedded?: boolean };
+type Props = { embedded?: boolean };
 
-export function ExpensesSection({ refreshKey = 0, onChanged, embedded = true }: Props) {
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
+export function ExpensesSection({ embedded = true }: Props) {
+  const enabled = useAuthQueryEnabled();
+  const { data: expenses = [], isLoading } = useExpensesQuery(enabled);
+  const deleteMutation = useDeleteExpenseMutation();
+  const updateMutation = useUpdateExpenseMutation();
   const [error, setError] = useState<string | null>(null);
   const [category, setCategory] = useState("");
   const [paymentMode, setPaymentMode] = useState("");
@@ -21,17 +29,6 @@ export function ExpensesSection({ refreshKey = 0, onChanged, embedded = true }: 
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [search, setSearch] = useState("");
-
-  const load = () => {
-    setLoading(true);
-    setError(null);
-    apiFetch<{ expenses: Expense[] }>("/api/expenses")
-      .then((data) => setExpenses(data.expenses))
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load expenses."))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(load, [refreshKey]);
 
   const filtered = useMemo(() => {
     return expenses
@@ -46,10 +43,9 @@ export function ExpensesSection({ refreshKey = 0, onChanged, embedded = true }: 
 
   async function remove(id: string) {
     if (!confirm("Delete this expense?")) return;
+    setError(null);
     try {
-      await apiFetch(`/api/expenses/${id}`, { method: "DELETE" });
-      setExpenses((prev) => prev.filter((e) => e.id !== id));
-      onChanged?.();
+      await deleteMutation.mutateAsync(id);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Delete failed.");
     }
@@ -64,13 +60,12 @@ export function ExpensesSection({ refreshKey = 0, onChanged, embedded = true }: 
     if (!Number.isFinite(amount)) return;
     const cat = prompt(`Category (${CATEGORIES.join(", ")})`, e.category) || e.category;
     const pm = prompt(`Payment mode (${PAYMENT_MODES.join(", ")})`, e.paymentMode) || e.paymentMode;
+    setError(null);
     try {
-      await apiFetch<Expense>(`/api/expenses/${e.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ description, amount, category: cat, paymentMode: pm }),
+      await updateMutation.mutateAsync({
+        id: e.id,
+        body: { description, amount, category: cat, paymentMode: pm },
       });
-      load();
-      onChanged?.();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Update failed.");
     }
@@ -99,7 +94,7 @@ export function ExpensesSection({ refreshKey = 0, onChanged, embedded = true }: 
         <div><FieldLabel>To</FieldLabel><CreamDatePicker value={to} onChange={setTo} placeholder="Any date" allowClear /></div>
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center", padding: "24px 0" }}>Loading expenses...</p>
       ) : filtered.length === 0 ? (
         <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center", padding: "24px 0" }}>No expenses match your filters.</p>

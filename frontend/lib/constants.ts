@@ -51,3 +51,5 @@ export type PaymentMode = (typeof PAYMENT_MODES)[number];
 export type IncomeSource = (typeof INCOME_SOURCES)[number];
 export type KnowledgeSourceType = (typeof KNOWLEDGE_SOURCE_TYPES)[number];
 export type KnowledgeTopic = (typeof KNOWLEDGE_TOPICS)[number];
+export type SavingsKind = (typeof SAVINGS_KINDS)[number];
+export type SavingsDestination = (typeof SAVINGS_DESTINATIONS)[number];

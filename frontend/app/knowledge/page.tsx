@@ -1,26 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { apiFetch, ApiError } from "@/lib/api";
 import { KNOWLEDGE_TOPICS } from "@/lib/constants";
-import type { KnowledgeNote } from "@/lib/types";
+import { useKnowledgeQuery } from "@/lib/query/hooks";
+import { useAuthQueryEnabled } from "@/hooks/useDashboardData";
 import { Alert, FieldLabel, PageCard, PageLoading, PageShell } from "@/components/ui/PageShell";
 import { CreamSelect } from "@/components/ui/CreamSelect";
 
 export default function KnowledgePage() {
-  const [notes, setNotes] = useState<KnowledgeNote[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const enabled = useAuthQueryEnabled();
+  const { data: notes = [], isLoading, error: queryError } = useKnowledgeQuery(enabled);
   const [search, setSearch] = useState("");
   const [topic, setTopic] = useState("");
-
-  useEffect(() => {
-    apiFetch<{ notes: KnowledgeNote[] }>("/api/knowledge")
-      .then((data) => setNotes(data.notes))
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load notes."))
-      .finally(() => setLoading(false));
-  }, []);
 
   const filtered = useMemo(
     () =>
@@ -28,10 +20,10 @@ export default function KnowledgePage() {
         .filter((n) => (topic ? n.topic === topic : true))
         .filter((n) => (search ? n.title.toLowerCase().includes(search.toLowerCase()) || n.note.toLowerCase().includes(search.toLowerCase()) : true))
         .sort((a, b) => (a.createdAt! < b.createdAt! ? 1 : -1)),
-    [notes, topic, search]
+    [notes, topic, search],
   );
 
-  if (loading) return <PageLoading message="Loading knowledge..." />;
+  if (isLoading) return <PageLoading message="Loading knowledge..." />;
 
   return (
     <PageShell
@@ -43,7 +35,7 @@ export default function KnowledgePage() {
         </Link>
       }
     >
-      {error && <Alert type="error">{error}</Alert>}
+      {queryError && <Alert type="error">Failed to load notes.</Alert>}
 
       <PageCard>
         <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: 16, lineHeight: 1.5 }}>

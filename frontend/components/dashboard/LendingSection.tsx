@@ -1,30 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { useState } from "react";
+import { ApiError } from "@/lib/api";
 import { inr, today } from "@/lib/format";
+import {
+  useCreateLendingMutation,
+  useDeleteLendingMutation,
+  useLendingQuery,
+  useUpdateLendingMutation,
+} from "@/lib/query/hooks";
+import { useAuthQueryEnabled } from "@/hooks/useDashboardData";
 import type { Lending } from "@/lib/types";
 import { Alert, FieldLabel, PageCard, SectionTitle } from "@/components/ui/PageShell";
 import { CreamDatePicker } from "@/components/ui/CreamDatePicker";
 
-type Props = { refreshKey?: number; onChanged?: () => void; embedded?: boolean };
+type Props = { embedded?: boolean };
 
-export function LendingSection({ refreshKey = 0, onChanged, embedded = true }: Props) {
-  const [lendings, setLendings] = useState<Lending[]>([]);
-  const [loading, setLoading] = useState(true);
+export function LendingSection({ embedded = true }: Props) {
+  const enabled = useAuthQueryEnabled();
+  const { data: lendings = [], isLoading } = useLendingQuery(enabled);
+  const createMutation = useCreateLendingMutation();
+  const updateMutation = useUpdateLendingMutation();
+  const deleteMutation = useDeleteLendingMutation();
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ date: today(), personName: "", amount: "", reason: "" });
-  const [saving, setSaving] = useState(false);
 
-  const load = () => {
-    setLoading(true);
-    apiFetch<{ lendings: Lending[] }>("/api/lending")
-      .then((d) => setLendings(d.lendings))
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load lending."))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(load, [refreshKey]);
+  const totalPending = lendings.filter((l) => l.status === "pending").reduce((s, l) => s + l.amount, 0);
 
   async function submit() {
     const amount = Number(form.amount);
@@ -32,37 +33,25 @@ export function LendingSection({ refreshKey = 0, onChanged, embedded = true }: P
       setError("Enter person name and valid amount.");
       return;
     }
-    setSaving(true);
     setError(null);
     try {
-      await apiFetch("/api/lending", {
-        method: "POST",
-        body: JSON.stringify({
-          date: form.date || today(),
-          personName: form.personName.trim(),
-          amount,
-          reason: form.reason.trim(),
-        }),
+      await createMutation.mutateAsync({
+        date: form.date || today(),
+        personName: form.personName.trim(),
+        amount,
+        reason: form.reason.trim(),
       });
       setForm({ date: today(), personName: "", amount: "", reason: "" });
-      load();
-      onChanged?.();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to add lending.");
-    } finally {
-      setSaving(false);
     }
   }
 
   async function toggleStatus(entry: Lending) {
     const next = entry.status === "pending" ? "settled" : "pending";
+    setError(null);
     try {
-      await apiFetch(`/api/lending/${entry.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ status: next }),
-      });
-      load();
-      onChanged?.();
+      await updateMutation.mutateAsync({ id: entry.id, body: { status: next } });
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Update failed.");
     }
@@ -70,16 +59,13 @@ export function LendingSection({ refreshKey = 0, onChanged, embedded = true }: P
 
   async function remove(id: string) {
     if (!confirm("Delete this lending entry?")) return;
+    setError(null);
     try {
-      await apiFetch(`/api/lending/${id}`, { method: "DELETE" });
-      load();
-      onChanged?.();
+      await deleteMutation.mutateAsync(id);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Delete failed.");
     }
   }
-
-  const totalPending = lendings.filter((l) => l.status === "pending").reduce((s, l) => s + l.amount, 0);
 
   return (
     <PageCard id={embedded ? "lending" : undefined} style={embedded ? undefined : { marginBottom: 0 }}>
@@ -96,11 +82,11 @@ export function LendingSection({ refreshKey = 0, onChanged, embedded = true }: P
         <div><FieldLabel>Amount (₹)</FieldLabel><input className="cream-input" type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></div>
         <div><FieldLabel>Reason</FieldLabel><input className="cream-input" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="dinner, trip..." /></div>
       </div>
-      <button className="btn-accent" onClick={submit} disabled={saving} style={{ width: "100%", marginBottom: 16 }}>
-        {saving ? "Saving..." : "Log lending"}
+      <button className="btn-accent" onClick={submit} disabled={createMutation.isPending} style={{ width: "100%", marginBottom: 16 }}>
+        {createMutation.isPending ? "Saving..." : "Log lending"}
       </button>
 
-      {loading ? (
+      {isLoading ? (
         <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>Loading...</p>
       ) : lendings.length === 0 ? (
         <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>No lending logged yet.</p>

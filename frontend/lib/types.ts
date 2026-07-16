@@ -105,6 +105,13 @@ export type SplitRecord = {
   expense: Expense | null;
 };
 
+export type PlateData = {
+  perFlatmate: PlateBalance[];
+  totalReceivable: number;
+  totalPayable: number;
+  netTotal: number;
+};
+
 export type PlateBalance = {
   flatmateId: string;
   name: string;

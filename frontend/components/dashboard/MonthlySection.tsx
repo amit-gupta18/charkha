@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { useExpensesQuery, useSettingsQuery } from "@/lib/query/hooks";
+import { useAuthQueryEnabled } from "@/hooks/useDashboardData";
 import { dateKey, expenseShare, inr, monthStr } from "@/lib/format";
-import type { Expense, Settings } from "@/lib/types";
+import type { Expense } from "@/lib/types";
 import { Alert, FieldLabel, PageCard, SectionTitle } from "@/components/ui/PageShell";
 import { CreamMonthPicker } from "@/components/ui/CreamMonthPicker";
 
-type Props = { refreshKey?: number; embedded?: boolean };
+type Props = { embedded?: boolean };
 
 type HeatmapCell = { date: string; total: number; top: string };
 
@@ -73,26 +74,14 @@ function buildMonthHeatmap(
   };
 }
 
-export function MonthlySection({ refreshKey = 0, embedded = true }: Props) {
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function MonthlySection({ embedded = true }: Props) {
+  const enabled = useAuthQueryEnabled();
+  const { data: expenses = [], isLoading: expensesLoading } = useExpensesQuery(enabled);
+  const { data: settings = null, isLoading: settingsLoading } = useSettingsQuery(enabled);
+  const loading = expensesLoading || settingsLoading;
+  const [error] = useState<string | null>(null);
   const [month, setMonth] = useState(monthStr(new Date()));
   const heatmapScrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    Promise.all([
-      apiFetch<{ expenses: Expense[] }>("/api/expenses"),
-      apiFetch<{ settings: Settings }>("/api/settings").catch(() => null),
-    ])
-      .then(([exp, set]) => {
-        setExpenses(exp.expenses);
-        setSettings(set?.settings ?? null);
-      })
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load monthly data."))
-      .finally(() => setLoading(false));
-  }, [refreshKey]);
 
   const dayData = useMemo(() => {
     const byDate = new Map<string, Map<string, number>>();

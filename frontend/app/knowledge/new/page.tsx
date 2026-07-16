@@ -3,17 +3,29 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiFetch, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { KNOWLEDGE_SOURCE_TYPES, KNOWLEDGE_TOPICS } from "@/lib/constants";
+import type { KnowledgeSourceType, KnowledgeTopic } from "@/lib/constants";
+import { useCreateKnowledgeMutation } from "@/lib/query/hooks";
 import { Alert, FieldLabel, PageCard, PageShell } from "@/components/ui/PageShell";
 import { CreamSelect } from "@/components/ui/CreamSelect";
 
 export default function NewKnowledgePage() {
   const router = useRouter();
-  const [form, setForm] = useState<{ title: string; sourceUrl: string; sourceType: string; topic: string; note: string }>({
-    title: "", sourceUrl: "", sourceType: KNOWLEDGE_SOURCE_TYPES[0], topic: KNOWLEDGE_TOPICS[0], note: "",
+  const createMutation = useCreateKnowledgeMutation();
+  const [form, setForm] = useState<{
+    title: string;
+    sourceUrl: string;
+    sourceType: KnowledgeSourceType;
+    topic: KnowledgeTopic;
+    note: string;
+  }>({
+    title: "",
+    sourceUrl: "",
+    sourceType: KNOWLEDGE_SOURCE_TYPES[0],
+    topic: KNOWLEDGE_TOPICS[0],
+    note: "",
   });
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
@@ -21,14 +33,12 @@ export default function NewKnowledgePage() {
       setError("Title and note are required.");
       return;
     }
-    setSaving(true);
     setError(null);
     try {
-      await apiFetch("/api/knowledge", { method: "POST", body: JSON.stringify(form) });
+      await createMutation.mutateAsync(form);
       router.push("/knowledge");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to save note.");
-      setSaving(false);
     }
   }
 
@@ -45,17 +55,17 @@ export default function NewKnowledgePage() {
           <div><FieldLabel>Source URL</FieldLabel><input className="cream-input" value={form.sourceUrl} onChange={(e) => setForm({ ...form, sourceUrl: e.target.value })} placeholder="YouTube, article link..." /></div>
           <div className="form-grid-2">
             <div><FieldLabel>Source Type</FieldLabel>
-              <CreamSelect value={form.sourceType} onChange={(sourceType) => setForm({ ...form, sourceType })} options={KNOWLEDGE_SOURCE_TYPES} />
+              <CreamSelect value={form.sourceType} onChange={(sourceType) => setForm({ ...form, sourceType: sourceType as KnowledgeSourceType })} options={KNOWLEDGE_SOURCE_TYPES} />
             </div>
             <div><FieldLabel>Topic</FieldLabel>
-              <CreamSelect value={form.topic} onChange={(topic) => setForm({ ...form, topic })} options={KNOWLEDGE_TOPICS} />
+              <CreamSelect value={form.topic} onChange={(topic) => setForm({ ...form, topic: topic as KnowledgeTopic })} options={KNOWLEDGE_TOPICS} />
             </div>
           </div>
           <div><FieldLabel>Your Note</FieldLabel>
             <textarea className="cream-input" rows={6} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="In your own words — why it matters..." style={{ resize: "vertical" }} />
           </div>
-          <button className="btn-accent" onClick={submit} disabled={saving} style={{ width: "100%" }}>
-            {saving ? "Saving..." : "Save note (+10 coins)"}
+          <button className="btn-accent" onClick={submit} disabled={createMutation.isPending} style={{ width: "100%" }}>
+            {createMutation.isPending ? "Saving..." : "Save note (+10 coins)"}
           </button>
         </div>
       </PageCard>

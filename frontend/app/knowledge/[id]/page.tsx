@@ -2,65 +2,81 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { KNOWLEDGE_SOURCE_TYPES, KNOWLEDGE_TOPICS } from "@/lib/constants";
-import type { KnowledgeNote } from "@/lib/types";
+import type { KnowledgeSourceType, KnowledgeTopic } from "@/lib/constants";
+import {
+  useDeleteKnowledgeMutation,
+  useKnowledgeDetailQuery,
+  useUpdateKnowledgeMutation,
+} from "@/lib/query/hooks";
+import { useAuthQueryEnabled } from "@/hooks/useDashboardData";
 import { Alert, FieldLabel, PageCard, PageLoading, PageShell } from "@/components/ui/PageShell";
 import { CreamSelect } from "@/components/ui/CreamSelect";
 
 export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const [note, setNote] = useState<KnowledgeNote | null>(null);
-  const [loading, setLoading] = useState(true);
+  const enabled = useAuthQueryEnabled();
+  const { data: note, isLoading, error: queryError } = useKnowledgeDetailQuery(id, enabled);
+  const updateMutation = useUpdateKnowledgeMutation();
+  const deleteMutation = useDeleteKnowledgeMutation();
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<{ title: string; sourceUrl: string; sourceType: string; topic: string; note: string }>({
-    title: "", sourceUrl: "", sourceType: KNOWLEDGE_SOURCE_TYPES[0], topic: KNOWLEDGE_TOPICS[0], note: "",
+  const [form, setForm] = useState<{
+    title: string;
+    sourceUrl: string;
+    sourceType: KnowledgeSourceType;
+    topic: KnowledgeTopic;
+    note: string;
+  }>({
+    title: "",
+    sourceUrl: "",
+    sourceType: KNOWLEDGE_SOURCE_TYPES[0],
+    topic: KNOWLEDGE_TOPICS[0],
+    note: "",
   });
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    apiFetch<{ note: KnowledgeNote }>(`/api/knowledge/${id}`)
-      .then((data) => {
-        const n = data.note;
-        setNote(n);
-        setForm({ title: n.title, sourceUrl: n.sourceUrl ?? "", sourceType: String(n.sourceType), topic: String(n.topic), note: n.note });
-      })
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load note."))
-      .finally(() => setLoading(false));
-  }, [id]);
+    if (!note) return;
+    setForm({
+      title: note.title,
+      sourceUrl: note.sourceUrl ?? "",
+      sourceType: (note.sourceType as KnowledgeSourceType) || KNOWLEDGE_SOURCE_TYPES[0],
+      topic: (note.topic as KnowledgeTopic) || KNOWLEDGE_TOPICS[0],
+      note: note.note,
+    });
+  }, [note]);
 
   async function save() {
-    setSaving(true);
     setError(null);
     try {
-      await apiFetch<KnowledgeNote>(`/api/knowledge/${id}`, { method: "PUT", body: JSON.stringify(form) });
-      setNote({ ...note!, title: form.title, sourceUrl: form.sourceUrl, sourceType: form.sourceType, topic: form.topic, note: form.note });
+      await updateMutation.mutateAsync({ id, body: form });
       setEditing(false);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Update failed.");
-    } finally {
-      setSaving(false);
     }
   }
 
   async function remove() {
     if (!confirm("Delete this note?")) return;
+    setError(null);
     try {
-      await apiFetch(`/api/knowledge/${id}`, { method: "DELETE" });
+      await deleteMutation.mutateAsync(id);
       router.push("/knowledge");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Delete failed.");
     }
   }
 
-  if (loading) return <PageLoading message="Loading note..." />;
-  if (error && !note) return (
-    <PageShell title="Note not found" subtitle="Knowledge">
-      <Alert type="error">{error}</Alert>
-    </PageShell>
-  );
+  if (isLoading) return <PageLoading message="Loading note..." />;
+  if ((queryError || error) && !note) {
+    return (
+      <PageShell title="Note not found" subtitle="Knowledge">
+        <Alert type="error">{error ?? "Failed to load note."}</Alert>
+      </PageShell>
+    );
+  }
   if (!note) return null;
 
   return (
@@ -84,13 +100,13 @@ export default function KnowledgeDetailPage({ params }: { params: Promise<{ id: 
             <div><FieldLabel>Title</FieldLabel><input className="cream-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
             <div><FieldLabel>Source URL</FieldLabel><input className="cream-input" value={form.sourceUrl} onChange={(e) => setForm({ ...form, sourceUrl: e.target.value })} /></div>
             <div className="form-grid-2">
-              <CreamSelect value={form.sourceType} onChange={(sourceType) => setForm({ ...form, sourceType })} options={KNOWLEDGE_SOURCE_TYPES} />
-              <CreamSelect value={form.topic} onChange={(topic) => setForm({ ...form, topic })} options={KNOWLEDGE_TOPICS} />
+              <CreamSelect value={form.sourceType} onChange={(sourceType) => setForm({ ...form, sourceType: sourceType as KnowledgeSourceType })} options={KNOWLEDGE_SOURCE_TYPES} />
+              <CreamSelect value={form.topic} onChange={(topic) => setForm({ ...form, topic: topic as KnowledgeTopic })} options={KNOWLEDGE_TOPICS} />
             </div>
             <textarea className="cream-input" rows={6} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={{ resize: "vertical" }} />
             <div style={{ display: "flex", gap: 10 }}>
               <button className="btn-ghost" onClick={() => setEditing(false)} style={{ flex: "0 0 auto" }}>Cancel</button>
-              <button className="btn-accent" onClick={save} disabled={saving} style={{ flex: 1 }}>{saving ? "Saving..." : "Save changes"}</button>
+              <button className="btn-accent" onClick={save} disabled={updateMutation.isPending} style={{ flex: 1 }}>{updateMutation.isPending ? "Saving..." : "Save changes"}</button>
             </div>
           </div>
         </PageCard>

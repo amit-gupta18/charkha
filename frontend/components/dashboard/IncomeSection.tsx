@@ -1,32 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { useState } from "react";
+import { ApiError } from "@/lib/api";
 import { INCOME_SOURCES } from "@/lib/constants";
 import { inr, today } from "@/lib/format";
-import type { Income } from "@/lib/types";
+import {
+  useCreateIncomeMutation,
+  useDeleteIncomeMutation,
+  useIncomeQuery,
+} from "@/lib/query/hooks";
+import { useAuthQueryEnabled } from "@/hooks/useDashboardData";
 import { Alert, FieldLabel, PageCard, SectionTitle } from "@/components/ui/PageShell";
 import { CreamSelect } from "@/components/ui/CreamSelect";
 import { CreamDatePicker } from "@/components/ui/CreamDatePicker";
 
-type Props = { refreshKey?: number; onChanged?: () => void; embedded?: boolean };
+type Props = { embedded?: boolean };
 
-export function IncomeSection({ refreshKey = 0, onChanged, embedded = true }: Props) {
-  const [incomes, setIncomes] = useState<Income[]>([]);
-  const [loading, setLoading] = useState(true);
+export function IncomeSection({ embedded = true }: Props) {
+  const enabled = useAuthQueryEnabled();
+  const { data: incomes = [], isLoading } = useIncomeQuery(enabled);
+  const createMutation = useCreateIncomeMutation();
+  const deleteMutation = useDeleteIncomeMutation();
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState<{ date: string; amount: string; source: string; notes: string }>({ date: today(), amount: "", source: INCOME_SOURCES[0], notes: "" });
-  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<{ date: string; amount: string; source: string; notes: string }>({
+    date: today(),
+    amount: "",
+    source: INCOME_SOURCES[0],
+    notes: "",
+  });
 
-  const load = () => {
-    setLoading(true);
-    apiFetch<{ incomes: Income[] }>("/api/income")
-      .then((d) => setIncomes(d.incomes.sort((a, b) => (a.date < b.date ? 1 : -1))))
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load income."))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(load, [refreshKey]);
+  const sorted = [...incomes].sort((a, b) => (a.date < b.date ? 1 : -1));
 
   async function submit() {
     const amount = Number(form.amount);
@@ -34,29 +37,25 @@ export function IncomeSection({ refreshKey = 0, onChanged, embedded = true }: Pr
       setError("Enter a valid amount.");
       return;
     }
-    setSaving(true);
     setError(null);
     try {
-      await apiFetch("/api/income", {
-        method: "POST",
-        body: JSON.stringify({ date: form.date || today(), amount, source: form.source, notes: form.notes || undefined }),
+      await createMutation.mutateAsync({
+        date: form.date || today(),
+        amount,
+        source: form.source,
+        notes: form.notes || undefined,
       });
       setForm({ date: today(), amount: "", source: INCOME_SOURCES[0], notes: "" });
-      load();
-      onChanged?.();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to add income.");
-    } finally {
-      setSaving(false);
     }
   }
 
   async function remove(id: string) {
     if (!confirm("Delete this income entry?")) return;
+    setError(null);
     try {
-      await apiFetch(`/api/income/${id}`, { method: "DELETE" });
-      setIncomes((p) => p.filter((i) => i.id !== id));
-      onChanged?.();
+      await deleteMutation.mutateAsync(id);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Delete failed.");
     }
@@ -81,20 +80,20 @@ export function IncomeSection({ refreshKey = 0, onChanged, embedded = true }: Pr
           <input className="cream-input" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Optional" />
         </div>
       </div>
-      <button className="btn-accent" onClick={submit} disabled={saving} style={{ width: "100%", marginBottom: 16 }}>
-        {saving ? "Saving..." : "Add income"}
+      <button className="btn-accent" onClick={submit} disabled={createMutation.isPending} style={{ width: "100%", marginBottom: 16 }}>
+        {createMutation.isPending ? "Saving..." : "Add income"}
       </button>
 
-      {loading ? (
+      {isLoading ? (
         <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>Loading income...</p>
-      ) : incomes.length === 0 ? (
+      ) : sorted.length === 0 ? (
         <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>No income recorded yet. Log allowance or freelance payments above.</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-          {incomes.map((i, idx) => (
+          {sorted.map((i, idx) => (
             <div key={i.id} className="list-row" style={{
               padding: "11px 0",
-              borderBottom: idx < incomes.length - 1 ? "1px solid var(--border-light)" : "none",
+              borderBottom: idx < sorted.length - 1 ? "1px solid var(--border-light)" : "none",
             }}>
               <div>
                 <p style={{ fontWeight: 600, fontSize: "0.88rem", color: "var(--text-primary)" }}>{i.source}</p>

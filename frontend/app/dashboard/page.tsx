@@ -1,32 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { useEffect, useRef } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { CATEGORIES, PAYMENT_MODES, INCOME_SOURCES, SAVINGS_DESTINATIONS, SAVINGS_KINDS } from "@/lib/constants";
-import { computeMonthLedger, monthKeyAfter } from "@/lib/balance";
-import { dateKey, expenseShare, inr, isoWeekKey, monthStr, today } from "@/lib/format";
-import type { DashboardData, Expense, Flatmate, Income, Saving, Settings } from "@/lib/types";
+import { CATEGORIES, PAYMENT_MODES, INCOME_SOURCES, SAVINGS_DESTINATIONS } from "@/lib/constants";
+import { expenseShare, inr } from "@/lib/format";
+import type { Flatmate } from "@/lib/types";
 import { PageLoading } from "@/components/ui/PageShell";
 import { CreamSelect } from "@/components/ui/CreamSelect";
 import { CreamDatePicker } from "@/components/ui/CreamDatePicker";
 import { CreamMonthPicker } from "@/components/ui/CreamMonthPicker";
 import { BentoCard, BarChart, DonutChart, PieChart, StatTile } from "@/components/dashboard/DashboardCharts";
 import { DashboardHeatmap } from "@/components/dashboard/DashboardHeatmap";
-
-type ParsedExpense = { date: string | null; description: string | null; category: string | null; amount: number | null; paymentMode: string | null; notes?: string | null };
-type ParsedSplitExpense = ParsedExpense & { matchedFlatmates?: Flatmate[]; unmatchedFlatmates?: string[] };
-type ParsedIncome = { date: string | null; source: string | null; amount: number | null; notes?: string | null };
-type ParsedLending = { personName: string | null; amount: number | null; reason?: string | null; date: string | null };
-type ParsedSaving = { kind: "invested" | "saved" | null; amount: number | null; destination?: string | null; reason?: string | null; date: string | null };
-type ParsedSplitClear = { flatmateId: string | null; flatmateName: string | null; amount: number | null; reason?: string | null; date: string | null; unmatched?: boolean };
-type ParsedIntent =
-  | { intent: "expense"; data: ParsedExpense }
-  | { intent: "split_expense"; data: ParsedSplitExpense }
-  | { intent: "income"; data: ParsedIncome }
-  | { intent: "lending"; data: ParsedLending }
-  | { intent: "savings"; data: ParsedSaving }
-  | { intent: "split_clear"; data: ParsedSplitClear };
+import { useDashboardData } from "@/hooks/useDashboardData";
+import { useVoiceLogger } from "@/hooks/useVoiceLogger";
+import { useMonthMetrics } from "@/lib/selectors/monthMetrics";
+import { useDashboardUiStore } from "@/stores/dashboardUi";
+import { useVoiceLoggerStore } from "@/stores/voiceLogger";
 
 
 function round2(n: number) { return Math.round(n * 100) / 100; }
@@ -338,351 +327,82 @@ function categoryIcon(category: string) {
 
 export default function Home() {
   const { isLoading: authLoading, user } = useAuth();
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [flashStats, setFlashStats] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const { dashboard: data, expenses, incomes, savingsEntries, settings, flatmates } = useDashboardData();
+  const selectedMonth = useDashboardUiStore((s) => s.selectedMonth);
+  const setSelectedMonth = useDashboardUiStore((s) => s.setSelectedMonth);
+  const flashStats = useDashboardUiStore((s) => s.flashStats);
 
-  const [agentText, setAgentText] = useState("");
-  const [listening, setListening] = useState(false);
-  const [interim, setInterim] = useState("");
-  const [parsing, setParsing] = useState(false);
-  const [agentError, setAgentError] = useState<string | null>(null);
-  const [intentData, setIntentData] = useState<ParsedIntent | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const agentText = useVoiceLoggerStore((s) => s.agentText);
+  const setAgentText = useVoiceLoggerStore((s) => s.setAgentText);
+  const listening = useVoiceLoggerStore((s) => s.listening);
+  const setListening = useVoiceLoggerStore((s) => s.setListening);
+  const interim = useVoiceLoggerStore((s) => s.interim);
+  const setInterim = useVoiceLoggerStore((s) => s.setInterim);
+  const agentError = useVoiceLoggerStore((s) => s.agentError);
+  const successMsg = useVoiceLoggerStore((s) => s.successMsg);
+  const intentData = useVoiceLoggerStore((s) => s.intentData);
+  const appState = useVoiceLoggerStore((s) => s.appState);
+  const expenseForm = useVoiceLoggerStore((s) => s.expenseForm);
+  const incomeForm = useVoiceLoggerStore((s) => s.incomeForm);
+  const lendingForm = useVoiceLoggerStore((s) => s.lendingForm);
+  const savingsForm = useVoiceLoggerStore((s) => s.savingsForm);
+  const clearForm = useVoiceLoggerStore((s) => s.clearForm);
+  const splitFlatmateIds = useVoiceLoggerStore((s) => s.splitFlatmateIds);
+  const splitShares = useVoiceLoggerStore((s) => s.splitShares);
+  const unmatchedFlatmates = useVoiceLoggerStore((s) => s.unmatchedFlatmates);
+  const setExpenseForm = useVoiceLoggerStore((s) => s.setExpenseForm);
+  const setIncomeForm = useVoiceLoggerStore((s) => s.setIncomeForm);
+  const setLendingForm = useVoiceLoggerStore((s) => s.setLendingForm);
+  const setSavingsForm = useVoiceLoggerStore((s) => s.setSavingsForm);
+  const setClearForm = useVoiceLoggerStore((s) => s.setClearForm);
+  const setSplitFlatmateIds = useVoiceLoggerStore((s) => s.setSplitFlatmateIds);
+  const setSplitShares = useVoiceLoggerStore((s) => s.setSplitShares);
+
+  const { sendForParse, confirmSave, cancelConfirm, parsing, saving } = useVoiceLogger(flatmates);
   const recognitionRef = useRef<any>(null);
-  const appStateRef = useRef<"IDLE" | "PARSING" | "PENDING">("IDLE");
+  const appStateRef = useRef(appState);
+  appStateRef.current = appState;
 
-  const [expenseForm, setExpenseForm] = useState<{ date: string; description: string; category: string; amount: string; paymentMode: string; notes: string }>({ date: today(), description: "", category: CATEGORIES[0], amount: "", paymentMode: PAYMENT_MODES[0], notes: "" });
-  const [incomeForm, setIncomeForm] = useState<{ date: string; source: string; amount: string; notes: string }>({ date: today(), source: INCOME_SOURCES[0], amount: "", notes: "" });
-  const [lendingForm, setLendingForm] = useState({ date: today(), personName: "", amount: "", reason: "" });
-  const [savingsForm, setSavingsForm] = useState<{ date: string; kind: string; amount: string; destination: string; reason: string }>({ date: today(), kind: SAVINGS_KINDS[0], amount: "", destination: SAVINGS_DESTINATIONS[0], reason: "" });
-  const [clearForm, setClearForm] = useState({ date: today(), flatmateId: "", amount: "", reason: "" });
-  const [splitFlatmateIds, setSplitFlatmateIds] = useState<string[]>([]);
-  const [splitShares, setSplitShares] = useState<Record<string, string>>({});
-  const [unmatchedFlatmates, setUnmatchedFlatmates] = useState<string[]>([]);
-  const [flatmates, setFlatmates] = useState<Flatmate[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [incomes, setIncomes] = useState<Income[]>([]);
-  const [savingsEntries, setSavingsEntries] = useState<Saving[]>([]);
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState(() => monthStr(new Date()));
+  const metrics = useMonthMetrics({
+    selectedMonth,
+    expenses,
+    incomes,
+    savingsEntries,
+    settings,
+    dashboardData: data,
+  });
 
-  const fetchDashboard = useCallback(() => {
-    apiFetch<DashboardData>("/api/dashboard")
-      .then(d => setData(d))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  const fetchChartData = useCallback(() => {
-    Promise.all([
-      apiFetch<{ expenses: Expense[] }>("/api/expenses"),
-      apiFetch<{ incomes: Income[] }>("/api/income"),
-      apiFetch<{ savings: Saving[] }>("/api/savings"),
-      apiFetch<{ settings: Settings }>("/api/settings").catch(() => null),
-    ])
-      .then(([exp, inc, sav, set]) => {
-        setExpenses(exp.expenses);
-        setIncomes(inc.incomes);
-        setSavingsEntries(sav.savings);
-        setSettings(set?.settings ?? null);
-      })
-      .catch(() => {});
-  }, []);
-
-  const refreshAll = useCallback(() => {
-    fetchDashboard();
-    fetchChartData();
-    setRefreshKey(k => k + 1);
-  }, [fetchDashboard, fetchChartData]);
-
-  useEffect(() => {
-    if (!authLoading) {
-      fetchDashboard();
-      fetchChartData();
-      apiFetch<{ flatmates: Flatmate[] }>("/api/flatmates").then(r => setFlatmates(r.flatmates)).catch(() => {});
-    }
-  }, [authLoading, fetchDashboard, fetchChartData, refreshKey]);
-
-  const isViewingCurrentMonth = selectedMonth === monthStr(new Date());
-  const weeklyLimit = settings?.weeklyLimit ?? data?.weeklyLimit ?? 2500;
-  const monthlyBudget = settings?.monthlyIncome ?? 0;
-
-  const monthExpenses = useMemo(
-    () => expenses.filter((e) => dateKey(e.date).slice(0, 7) === selectedMonth),
-    [expenses, selectedMonth],
-  );
-
-  const monthIncomes = useMemo(
-    () => incomes.filter((i) => dateKey(i.date).slice(0, 7) === selectedMonth),
-    [incomes, selectedMonth],
-  );
-
-  const monthSpend = useMemo(
-    () => monthExpenses.reduce((s, e) => s + expenseShare(e), 0),
-    [monthExpenses],
-  );
-
-  const monthIncomeTotal = useMemo(
-    () => monthIncomes.reduce((s, i) => s + i.amount, 0),
-    [monthIncomes],
-  );
-
-  const monthInvested = useMemo(
-    () =>
-      savingsEntries
-        .filter((s) => dateKey(s.date).slice(0, 7) === selectedMonth && s.kind === "invested")
-        .reduce((sum, s) => sum + s.amount, 0),
-    [savingsEntries, selectedMonth],
-  );
-
-  const monthSaved = useMemo(
-    () =>
-      savingsEntries
-        .filter((s) => dateKey(s.date).slice(0, 7) === selectedMonth && s.kind === "saved")
-        .reduce((sum, s) => sum + s.amount, 0),
-    [savingsEntries, selectedMonth],
-  );
-
-  const monthSavingsTotal = monthInvested + monthSaved;
-
-  const monthTypeSplit = useMemo(() => {
-    const split = { Need: 0, Want: 0 };
-    for (const e of monthExpenses) {
-      if (e.type === "Need") split.Need += expenseShare(e);
-      else split.Want += expenseShare(e);
-    }
-    return split;
-  }, [monthExpenses]);
-
-  const categorySegments = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const e of monthExpenses) {
-      totals.set(e.category, (totals.get(e.category) ?? 0) + expenseShare(e));
-    }
-    return Array.from(totals.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([label, value]) => ({ label, value }));
-  }, [monthExpenses]);
-
-  const weeklyBars = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const e of monthExpenses) {
-      const k = isoWeekKey(e.date);
-      map.set(k, (map.get(k) ?? 0) + expenseShare(e));
-    }
-    const currentKey = isViewingCurrentMonth ? isoWeekKey(today()) : "";
-    return Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([key, value]) => ({
-        label: key.split("-W")[1] ? `W${key.split("-W")[1]}` : key,
-        value,
-        highlight: key === currentKey,
-      }));
-  }, [monthExpenses, isViewingCurrentMonth]);
-
-  const monthBars = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const e of expenses) {
-      const k = dateKey(e.date).slice(0, 7);
-      map.set(k, (map.get(k) ?? 0) + expenseShare(e));
-    }
-    const [year, month] = selectedMonth.split("-").map(Number);
-    const items = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(year, month - 1 - i, 1);
-      const k = monthStr(d);
-      items.push({
-        label: d.toLocaleDateString("en-IN", { month: "short" }),
-        value: map.get(k) ?? 0,
-        highlight: k === selectedMonth,
-      });
-    }
-    return items;
-  }, [expenses, selectedMonth]);
-
-  const recentThree = useMemo(
-    () =>
-      [...monthExpenses]
-        .sort((a, b) => dateKey(b.date).localeCompare(dateKey(a.date)))
-        .slice(0, 3),
-    [monthExpenses],
-  );
-
-  const daysWithSpend = useMemo(() => {
-    const days = new Set(
-      monthExpenses.filter((e) => expenseShare(e) > 0).map((e) => dateKey(e.date)),
-    );
-    return days.size;
-  }, [monthExpenses]);
-
-  const avgDailySpend = useMemo(() => {
-    const [y, m] = selectedMonth.split("-").map(Number);
-    const daysInMonth = new Date(y, m, 0).getDate();
-    const divisor = isViewingCurrentMonth ? Math.max(1, new Date().getDate()) : daysInMonth;
-    return monthSpend / divisor;
-  }, [monthSpend, selectedMonth, isViewingCurrentMonth]);
-
-  const dayThreshold = weeklyLimit / 7 || 1;
-
-  const monthLedger = useMemo(
-    () =>
-      computeMonthLedger(
-        selectedMonth,
-        settings?.startingBalance ?? data?.startingBalance ?? 0,
-        incomes,
-        expenses,
-        savingsEntries.map((s) => ({
-          date: dateKey(s.date),
-          amount: s.amount,
-          status: s.status,
-          withdrawnAt: s.withdrawnAt ? dateKey(String(s.withdrawnAt)) : null,
-        })),
-      ),
-    [selectedMonth, settings?.startingBalance, data?.startingBalance, incomes, expenses, savingsEntries],
-  );
-
-  const prevMonthLabel = monthLedger.prevMonthKey ? formatMonthLabel(monthLedger.prevMonthKey) : null;
-  const nextMonthLabel = formatMonthLabel(monthKeyAfter(selectedMonth));
-
-  const fillExpenseForm = (p: ParsedExpense) => {
-    setExpenseForm({
-      date: p.date || today(),
-      description: p.description || "",
-      category: CATEGORIES.includes(p.category as typeof CATEGORIES[number]) ? p.category! : CATEGORIES[0],
-      amount: p.amount != null ? String(p.amount) : "",
-      paymentMode: PAYMENT_MODES.includes(p.paymentMode as typeof PAYMENT_MODES[number]) ? p.paymentMode! : PAYMENT_MODES[0],
-      notes: p.notes || "",
-    });
-  };
-
-  const sendForParse = useCallback(async (text: string) => {
-    if (!text.trim()) return;
-    setAgentError(null);
-    setParsing(true);
-    appStateRef.current = "PARSING";
-    try {
-      const res = await apiFetch<ParsedIntent>("/api/parse", { method: "POST", body: JSON.stringify({ text }) });
-      setIntentData(res);
-      if (res.intent === "expense") {
-        fillExpenseForm(res.data);
-      } else if (res.intent === "split_expense") {
-        fillExpenseForm(res.data);
-        const matched = res.data.matchedFlatmates ?? [];
-        setUnmatchedFlatmates(res.data.unmatchedFlatmates ?? []);
-        const ids = matched.map(f => f.id);
-        setSplitFlatmateIds(ids);
-        const total = res.data.amount ?? 0;
-        const per = ids.length > 0 ? round2(total / (ids.length + 1)) : 0;
-        const shares: Record<string, string> = {};
-        ids.forEach(id => { shares[id] = String(per); });
-        setSplitShares(shares);
-      } else if (res.intent === "income") {
-        const p = res.data;
-        setIncomeForm({ date: p.date || today(), source: INCOME_SOURCES.includes(p.source as typeof INCOME_SOURCES[number]) ? p.source! : INCOME_SOURCES[0], amount: p.amount != null ? String(p.amount) : "", notes: p.notes || "" });
-      } else if (res.intent === "lending") {
-        const p = res.data;
-        setLendingForm({ date: p.date || today(), personName: p.personName || "", amount: p.amount != null ? String(p.amount) : "", reason: p.reason || "" });
-      } else if (res.intent === "savings") {
-        const p = res.data;
-        setSavingsForm({
-          date: p.date || today(),
-          kind: p.kind === "saved" ? "saved" : "invested",
-          amount: p.amount != null ? String(p.amount) : "",
-          destination: p.destination && SAVINGS_DESTINATIONS.includes(p.destination as typeof SAVINGS_DESTINATIONS[number]) ? p.destination : SAVINGS_DESTINATIONS[0],
-          reason: p.reason || "",
-        });
-      } else if (res.intent === "split_clear") {
-        const p = res.data;
-        setClearForm({ date: p.date || today(), flatmateId: p.flatmateId || flatmates[0]?.id || "", amount: p.amount != null ? String(p.amount) : "", reason: p.reason || "" });
-        setUnmatchedFlatmates(p.unmatched ? [p.flatmateName || ""] : []);
-      }
-      appStateRef.current = "PENDING";
-    } catch (e) {
-      setAgentError(e instanceof ApiError ? e.message : "Could not parse. Try again.");
-      appStateRef.current = "IDLE";
-    } finally { setParsing(false); }
-  }, [flatmates]);
-
-  const confirmSave = useCallback(async () => {
-    if (!intentData) return;
-    setSaving(true);
-    try {
-      if (intentData.intent === "expense") {
-        await apiFetch("/api/expenses", { method: "POST", body: JSON.stringify({ date: expenseForm.date || today(), description: expenseForm.description, category: expenseForm.category, amount: Number(expenseForm.amount), paymentMode: expenseForm.paymentMode, notes: expenseForm.notes || undefined }) });
-        setSuccessMsg(`✓ Expense saved — ${inr(Number(expenseForm.amount))}`);
-      } else if (intentData.intent === "split_expense") {
-        if (splitFlatmateIds.length === 0 || unmatchedFlatmates.length > 0) {
-          setAgentError("Fix flatmate selection before saving.");
-          setSaving(false);
-          return;
-        }
-        await apiFetch("/api/expenses", {
-          method: "POST",
-          body: JSON.stringify({
-            date: expenseForm.date || today(),
-            description: expenseForm.description,
-            category: expenseForm.category,
-            amount: Number(expenseForm.amount),
-            paymentMode: expenseForm.paymentMode,
-            notes: expenseForm.notes || undefined,
-            split: { flatmateIds: splitFlatmateIds, shares: splitFlatmateIds.map(id => Number(splitShares[id]) || 0) },
-          }),
-        });
-        setSuccessMsg(`✓ Split expense saved — your share ${inr(round2(Number(expenseForm.amount) - splitFlatmateIds.reduce((s, id) => s + (Number(splitShares[id]) || 0), 0)))}`);
-      } else if (intentData.intent === "income") {
-        await apiFetch("/api/income", { method: "POST", body: JSON.stringify({ date: incomeForm.date || today(), source: incomeForm.source, amount: Number(incomeForm.amount), notes: incomeForm.notes || undefined }) });
-        setSuccessMsg(`✓ Income saved — ${inr(Number(incomeForm.amount))}`);
-      } else if (intentData.intent === "lending") {
-        await apiFetch("/api/lending", { method: "POST", body: JSON.stringify({ date: lendingForm.date || today(), personName: lendingForm.personName, amount: Number(lendingForm.amount), reason: lendingForm.reason }) });
-        setSuccessMsg(`✓ Lending saved — ${inr(Number(lendingForm.amount))}`);
-      } else if (intentData.intent === "savings") {
-        await apiFetch("/api/savings", {
-          method: "POST",
-          body: JSON.stringify({
-            date: savingsForm.date || today(),
-            kind: savingsForm.kind,
-            amount: Number(savingsForm.amount),
-            destination: savingsForm.destination,
-            reason: savingsForm.reason,
-          }),
-        });
-        setSuccessMsg(`✓ Savings logged — ${inr(Number(savingsForm.amount))}`);
-      } else if (intentData.intent === "split_clear") {
-        if (!clearForm.flatmateId) {
-          setAgentError("Select a flatmate.");
-          setSaving(false);
-          return;
-        }
-        await apiFetch("/api/splits/settlements", { method: "POST", body: JSON.stringify({ flatmateId: clearForm.flatmateId, amount: Number(clearForm.amount), reason: clearForm.reason, date: clearForm.date || today(), direction: "received" }) });
-        setSuccessMsg(`✓ Split clear saved — ${inr(Number(clearForm.amount))}`);
-      }
-      setIntentData(null); setAgentText(""); appStateRef.current = "IDLE";
-      setSplitFlatmateIds([]); setSplitShares({}); setUnmatchedFlatmates([]);
-      setFlashStats(true);
-      setTimeout(() => setFlashStats(false), 1200);
-      refreshAll();
-      setTimeout(() => setSuccessMsg(null), 3000);
-    } catch (e) {
-      setAgentError(e instanceof ApiError ? e.message : "Save failed.");
-    } finally { setSaving(false); }
-  }, [intentData, expenseForm, incomeForm, lendingForm, savingsForm, clearForm, splitFlatmateIds, splitShares, unmatchedFlatmates, refreshAll]);
-
-  const cancelConfirm = useCallback(() => {
-    setIntentData(null); appStateRef.current = "IDLE";
-    setAgentText(""); setAgentError("Cancelled.");
-    setTimeout(() => setAgentError(null), 2000);
-  }, []);
+  const {
+    isViewingCurrentMonth,
+    weeklyLimit,
+    monthlyBudget,
+    monthSpend,
+    monthIncomeTotal,
+    monthInvested,
+    monthSaved,
+    monthSavingsTotal,
+    categorySegments,
+    weeklyBars,
+    monthBars,
+    recentThree,
+    dayThreshold,
+    monthLedger,
+    prevMonthLabel,
+    nextMonthLabel,
+    monthLabel,
+    typeSegments,
+  } = metrics;
 
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
     const rec = new SR();
-    rec.continuous = false; rec.interimResults = true; rec.lang = "en-IN";
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.lang = "en-IN";
     rec.onresult = (event: any) => {
-      let interimText = ""; let final = "";
+      let interimText = "";
+      let final = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         if (event.results[i].isFinal) final += event.results[i][0].transcript;
         else interimText += event.results[i][0].transcript;
@@ -702,32 +422,31 @@ export default function Home() {
     rec.onend = () => setListening(false);
     rec.onerror = () => setListening(false);
     recognitionRef.current = rec;
-  }, [sendForParse, confirmSave, cancelConfirm]);
+  }, [sendForParse, confirmSave, cancelConfirm, setAgentText, setInterim, setListening]);
 
   function toggleMic() {
-    if (listening) { recognitionRef.current?.stop(); setListening(false); setInterim(""); }
-    else { recognitionRef.current?.start(); setListening(true); setAgentError(null); }
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      setInterim("");
+    } else {
+      recognitionRef.current?.start();
+      setListening(true);
+      useVoiceLoggerStore.getState().setAgentError(null);
+    }
   }
 
-  if (authLoading || (loading && !data)) return <PageLoading message="Loading dashboard..." />;
-  if (!user) return null;
+  if (authLoading || !user || !data) return <PageLoading message="Loading dashboard..." />;
 
-  const d = data!;
-  const weeklyPct = isViewingCurrentMonth && d.weeklyLimit > 0 ? Math.min(100, (d.weeklySpend / d.weeklyLimit) * 100) : 0;
-  const weeklyOver = isViewingCurrentMonth && d.weeklySpend > d.weeklyLimit;
+  const d = data;
+  const weeklySpend = d.weeklySpend ?? 0;
+  const weeklyPct = isViewingCurrentMonth && weeklyLimit > 0 ? Math.min(100, (weeklySpend / weeklyLimit) * 100) : 0;
+  const weeklyOver = isViewingCurrentMonth && weeklySpend > weeklyLimit;
   const coinPositive = d.coinBalance >= 0;
 
-  const weeklyRemaining = isViewingCurrentMonth ? Math.max(0, d.weeklyLimit - d.weeklySpend) : 0;
+  const weeklyRemaining = isViewingCurrentMonth ? Math.max(0, weeklyLimit - weeklySpend) : 0;
   const monthBudgetPct = monthlyBudget > 0 ? Math.min(100, (monthSpend / monthlyBudget) * 100) : 0;
   const monthBudgetOver = monthlyBudget > 0 && monthSpend > monthlyBudget;
-  const monthLabel = formatMonthLabel(selectedMonth);
-
-  const typeSegments = [
-    { label: "Need", value: monthTypeSplit.Need, color: "var(--blue)" },
-    { label: "Want", value: monthTypeSplit.Want, color: "var(--orange)" },
-    ...(monthInvested > 0 ? [{ label: "Invested", value: monthInvested, color: "var(--green)" }] : []),
-    ...(monthSaved > 0 ? [{ label: "Saved", value: monthSaved, color: "var(--accent)" }] : []),
-  ];
 
   return (
     <div className="dashboard-page">
@@ -819,7 +538,7 @@ export default function Home() {
         {isViewingCurrentMonth ? (
           <>
             <StatTile label="Today" value={inr(d.todaySpend)} sub="expenses" flash={flashStats} />
-            <StatTile label="This week" value={inr(d.weeklySpend)} sub={`${Math.round(weeklyPct)}% of limit`} flash={flashStats} />
+            <StatTile label="This week" value={inr(weeklySpend)} sub={`${Math.round(weeklyPct)}% of limit`} flash={flashStats} />
             <StatTile label={monthLabel} value={inr(monthSpend)} sub={monthSavingsTotal > 0 ? `${inr(monthSavingsTotal)} to savings` : "expenses"} flash={flashStats} />
           </>
         ) : (
@@ -832,7 +551,7 @@ export default function Home() {
 
         <BentoCard
           title={isViewingCurrentMonth ? "Weekly budget" : "Monthly budget"}
-          subtitle={isViewingCurrentMonth ? `Limit ${inr(d.weeklyLimit)}` : monthlyBudget > 0 ? `Budget ${inr(monthlyBudget)}` : monthLabel}
+          subtitle={isViewingCurrentMonth ? `Limit ${inr(weeklyLimit)}` : monthlyBudget > 0 ? `Budget ${inr(monthlyBudget)}` : monthLabel}
           span={1}
         >
           {isViewingCurrentMonth ? (
@@ -841,7 +560,7 @@ export default function Home() {
               centerValue={`${Math.round(weeklyPct)}%`}
               centerLabel={weeklyOver ? "over" : "used"}
               segments={[
-                { label: "Spent", value: d.weeklySpend, color: weeklyOver ? "var(--red)" : "var(--orange)" },
+                { label: "Spent", value: weeklySpend, color: weeklyOver ? "var(--red)" : "var(--orange)" },
                 { label: "Left", value: weeklyRemaining, color: "var(--green)" },
               ]}
             />

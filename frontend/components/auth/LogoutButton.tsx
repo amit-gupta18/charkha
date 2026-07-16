@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { apiFetch } from "@/lib/api";
+import { queryClient } from "@/lib/query/client";
 import { broadcastAuthEvent } from "@/lib/sessionSync";
 
 export function LogoutButton() {
@@ -16,8 +17,9 @@ export function LogoutButton() {
 
     try {
       await apiFetch("/api/auth/logout", { method: "POST" });
-      setUser(null);
+      queryClient.clear();
       broadcastAuthEvent("logout");
+      setUser(null);
       router.replace("/login");
       router.refresh();
     } finally {
