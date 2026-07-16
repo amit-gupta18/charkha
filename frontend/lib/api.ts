@@ -1,4 +1,4 @@
-/** Calls the backend directly via NEXT_PUBLIC_API_URL (cross-origin, cookie auth). */
+/** Same-origin /api requests (proxied to BACKEND_URL via next.config rewrites). */
 import { broadcastAuthEvent, withRefreshLock } from "@/lib/sessionSync";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";

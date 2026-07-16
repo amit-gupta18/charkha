@@ -18,13 +18,9 @@ export const env = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
   PORT: Number(process.env.PORT ?? 8000),
   NODE_ENV: process.env.NODE_ENV ?? "development",
-  CORS_ORIGIN: process.env.CORS_ORIGIN ?? "http://localhost:3000",
-  CORS_ALLOW_ALL: process.env.CORS_ORIGIN === "*" || process.env.CORS_ALLOW_ALL === "true",
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN ?? "1h",
   COOKIE_NAME: process.env.COOKIE_NAME ?? "accessToken",
   REFRESH_COOKIE_NAME: process.env.REFRESH_COOKIE_NAME ?? "refreshToken",
-  /** When true, auth cookies use SameSite=None for direct cross-origin browser API calls. */
-  COOKIE_CROSS_SITE: process.env.COOKIE_CROSS_SITE === "true",
   ACCESS_COOKIE_MAX_AGE_MS: Number(process.env.ACCESS_COOKIE_MAX_AGE_MS ?? 60 * 60 * 1000),
   REFRESH_TOKEN_MAX_AGE_MS: Number(process.env.REFRESH_TOKEN_MAX_AGE_MS ?? 7 * 24 * 60 * 60 * 1000),
   /** @deprecated Use ACCESS_COOKIE_MAX_AGE_MS */

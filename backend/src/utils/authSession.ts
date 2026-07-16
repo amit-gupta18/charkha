@@ -29,15 +29,15 @@ function isExpiredTokenError(error: unknown) {
   return error instanceof jwt.TokenExpiredError;
 }
 
-async function issueSession(response: Response, userId: string, email: string, request?: Request) {
+async function issueSession(response: Response, userId: string, email: string) {
   const token = signAuthToken({ userId, email });
-  setAccessCookie(response, token, request);
+  setAccessCookie(response, token);
   return { userId, email };
 }
 
-export async function establishSession(response: Response, userId: string, email: string, request?: Request) {
-  await issueSession(response, userId, email, request);
-  await createRefreshToken(userId, response, request);
+export async function establishSession(response: Response, userId: string, email: string) {
+  await issueSession(response, userId, email);
+  await createRefreshToken(userId, response);
 }
 
 export async function resolveSession(request: Request, response: Response): Promise<SessionUser | null> {
@@ -46,11 +46,11 @@ export async function resolveSession(request: Request, response: Response): Prom
   if (accessToken) {
     try {
       const payload = verifyAuthToken(accessToken);
-      refreshAccessSession(response, payload, request);
+      refreshAccessSession(response, payload);
       return payload;
     } catch (error) {
       if (!isExpiredTokenError(error)) {
-        clearAccessCookie(response, request);
+        clearAccessCookie(response);
         return null;
       }
     }
@@ -58,30 +58,30 @@ export async function resolveSession(request: Request, response: Response): Prom
 
   const refreshRaw = readRefreshToken(request);
   if (!refreshRaw) {
-    clearAccessCookie(response, request);
+    clearAccessCookie(response);
     return null;
   }
 
   const userId = await validateRefreshToken(refreshRaw);
   if (!userId) {
-    clearAccessCookie(response, request);
-    clearRefreshCookie(response, request);
+    clearAccessCookie(response);
+    clearRefreshCookie(response);
     return null;
   }
 
   const user = await User.findById(userId);
   if (!user) {
     await revokeRefreshToken(refreshRaw);
-    clearAccessCookie(response, request);
-    clearRefreshCookie(response, request);
+    clearAccessCookie(response);
+    clearRefreshCookie(response);
     return null;
   }
 
-  return issueSession(response, String(user._id), user.email, request);
+  return issueSession(response, String(user._id), user.email);
 }
 
 export async function clearSession(request: Request, response: Response) {
   await revokeRefreshToken(readRefreshToken(request));
-  clearAccessCookie(response, request);
-  clearRefreshCookie(response, request);
+  clearAccessCookie(response);
+  clearRefreshCookie(response);
 }

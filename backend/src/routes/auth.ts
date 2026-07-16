@@ -52,7 +52,7 @@ router.post("/register", async (request, response, next) => {
 
     await Settings.create({ userId: user._id });
 
-    await establishSession(response, String(user._id), user.email, request);
+    await establishSession(response, String(user._id), user.email);
     response.status(201).json({ user: serializeUser(user) });
   } catch (error) {
     next(error);
@@ -83,7 +83,7 @@ router.post("/login", async (request, response, next) => {
       return;
     }
 
-    await establishSession(response, String(user._id), user.email, request);
+    await establishSession(response, String(user._id), user.email);
     response.json({ user: serializeUser(user) });
   } catch (error) {
     next(error);

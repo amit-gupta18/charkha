@@ -61,7 +61,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   completeLogin: async () => {
     const ok = await get().loadSession({ clearOnFailure: true });
     if (!ok) {
-      throw new ApiError("Session could not be established. Check cookie/CORS settings.", 401);
+      throw new ApiError("Session could not be established after login.", 401);
     }
     const user = get().user;
     if (!user) {
