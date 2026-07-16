@@ -2,32 +2,34 @@
 
 import { startTransition, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { refreshSession } from "@/lib/api";
+import { refreshAccessToken } from "@/lib/api";
+import { getRefreshToken } from "@/lib/auth-session";
 import { subscribeAuthEvents } from "@/lib/sessionSync";
 import { useAuthStore } from "@/stores/auth";
 
 const PUBLIC_ROUTES = new Set(["/", "/login", "/signup"]);
 const AUTH_ENTRY_ROUTES = new Set(["/login", "/signup"]);
-const SESSION_REFRESH_MS = 45 * 60 * 1000;
+/** Proactive refresh before 15m access token expires. */
+const SESSION_REFRESH_MS = 12 * 60 * 1000;
 
 /** Runs session bootstrap, refresh, cross-tab sync, and route guards. State lives in useAuthStore. */
 export function AuthBootstrap() {
   const pathname = usePathname();
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const accessToken = useAuthStore((s) => s.accessToken);
   const isLoading = useAuthStore((s) => s.isLoading);
-  const loadSession = useAuthStore((s) => s.loadSession);
+  const bootstrapSession = useAuthStore((s) => s.bootstrapSession);
   const handleSessionLost = useAuthStore((s) => s.handleSessionLost);
-  const setLoading = useAuthStore((s) => s.setLoading);
 
   useEffect(() => {
     let cancelled = false;
 
     async function bootstrap() {
       try {
-        await loadSession({ clearOnFailure: true });
+        await bootstrapSession();
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) useAuthStore.setState({ isLoading: false });
       }
     }
 
@@ -35,16 +37,16 @@ export function AuthBootstrap() {
     return () => {
       cancelled = true;
     };
-  }, [loadSession, setLoading]);
+  }, [bootstrapSession]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      void refreshSession();
+      if (getRefreshToken()) void refreshAccessToken();
     }, SESSION_REFRESH_MS);
 
     function onVisible() {
-      if (document.visibilityState === "visible") {
-        void loadSession();
+      if (document.visibilityState === "visible" && getRefreshToken()) {
+        void refreshAccessToken();
       }
     }
 
@@ -56,7 +58,7 @@ export function AuthBootstrap() {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
     };
-  }, [loadSession]);
+  }, []);
 
   useEffect(() => {
     return subscribeAuthEvents((event) => {
@@ -64,27 +66,30 @@ export function AuthBootstrap() {
         handleSessionLost();
         return;
       }
+      // Login tab already called setSession — don't re-bootstrap (can clear session if refresh races).
       if (event.type === "login") return;
-      void loadSession();
+      void refreshAccessToken();
     });
-  }, [loadSession, handleSessionLost]);
+  }, [bootstrapSession, handleSessionLost]);
 
   useEffect(() => {
     if (isLoading) return;
 
-    if (user && AUTH_ENTRY_ROUTES.has(pathname)) {
+    const isAuthenticated = !!user && !!accessToken;
+
+    if (isAuthenticated && AUTH_ENTRY_ROUTES.has(pathname)) {
       startTransition(() => {
         router.replace("/dashboard");
       });
       return;
     }
 
-    if (!user && !PUBLIC_ROUTES.has(pathname)) {
+    if (!isAuthenticated && !PUBLIC_ROUTES.has(pathname)) {
       startTransition(() => {
         router.replace("/login");
       });
     }
-  }, [isLoading, user, pathname, router]);
+  }, [isLoading, user, accessToken, pathname, router]);
 
   return null;
 }

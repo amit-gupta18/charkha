@@ -13,7 +13,8 @@ import {
 export function useAuthQueryEnabled() {
   const authLoading = useAuthStore((s) => s.isLoading);
   const user = useAuthStore((s) => s.user);
-  return !authLoading && !!user;
+  const accessToken = useAuthStore((s) => s.accessToken);
+  return !authLoading && !!user && !!accessToken;
 }
 
 export function useDashboardData() {

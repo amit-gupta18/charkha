@@ -10,7 +10,7 @@ import { Alert, FieldLabel } from "@/components/ui/PageShell";
 
 export function LoginForm() {
   const router = useRouter();
-  const completeLogin = useAuthStore((s) => s.completeLogin);
+  const setSession = useAuthStore((s) => s.setSession);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -22,12 +22,16 @@ export function LoginForm() {
     setIsSubmitting(true);
 
     try {
-      await apiFetch<AuthResponse>("/api/auth/login", {
+      const data = await apiFetch<AuthResponse>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
 
-      await completeLogin();
+      setSession({
+        user: data.user,
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+      });
       broadcastAuthEvent("login");
       router.replace("/dashboard");
       router.refresh();

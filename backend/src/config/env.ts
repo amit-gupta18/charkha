@@ -18,7 +18,7 @@ export const env = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
   PORT: Number(process.env.PORT ?? 8000),
   NODE_ENV: process.env.NODE_ENV ?? "development",
-  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN ?? "1h",
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN ?? "15m",
   COOKIE_NAME: process.env.COOKIE_NAME ?? "accessToken",
   REFRESH_COOKIE_NAME: process.env.REFRESH_COOKIE_NAME ?? "refreshToken",
   ACCESS_COOKIE_MAX_AGE_MS: Number(process.env.ACCESS_COOKIE_MAX_AGE_MS ?? 60 * 60 * 1000),

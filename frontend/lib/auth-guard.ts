@@ -3,11 +3,11 @@ import { useAuthStore } from "@/stores/auth";
 
 /** Block mutations/queries when there is no authenticated user. */
 export function assertAuthenticated() {
-  const { user, isLoading } = useAuthStore.getState();
+  const { user, accessToken, isLoading } = useAuthStore.getState();
   if (isLoading) {
     throw new ApiError("Session is still loading. Try again in a moment.", 401);
   }
-  if (!user) {
+  if (!user || !accessToken) {
     throw new ApiError("You must be signed in to do that.", 401);
   }
   return user;

@@ -27,7 +27,7 @@ export function broadcastAuthEvent(type: AuthSyncEvent["type"]) {
     channel.postMessage({ type } satisfies AuthSyncEvent);
     channel.close();
   } catch {
-    // BroadcastChannel unavailable — cookies still sync across tabs.
+    // BroadcastChannel unavailable — sessionStorage still syncs across tabs on same origin.
   }
 }
 

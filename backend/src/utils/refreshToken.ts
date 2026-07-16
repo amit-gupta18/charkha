@@ -1,14 +1,12 @@
 import crypto from "crypto";
-import { Response } from "express";
 import { env } from "../config/env";
 import { RefreshToken } from "../models/RefreshToken";
-import { setRefreshCookie, clearRefreshCookie } from "./jwt";
 
 function hashToken(raw: string) {
   return crypto.createHash("sha256").update(raw).digest("hex");
 }
 
-export async function createRefreshToken(userId: string, response: Response) {
+export async function createRefreshToken(userId: string) {
   const raw = crypto.randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + env.REFRESH_TOKEN_MAX_AGE_MS);
 
@@ -18,7 +16,6 @@ export async function createRefreshToken(userId: string, response: Response) {
     expiresAt,
   });
 
-  setRefreshCookie(response, raw, env.REFRESH_TOKEN_MAX_AGE_MS);
   return raw;
 }
 
@@ -32,31 +29,6 @@ export async function validateRefreshToken(raw: string) {
     return null;
   }
 
-  return String(existing.userId);
-}
-
-export async function rotateRefreshToken(raw: string, response: Response) {
-  const tokenHash = hashToken(raw);
-  const existing = await RefreshToken.findOne({ tokenHash });
-
-  if (!existing || existing.expiresAt.getTime() <= Date.now()) {
-    if (existing) await RefreshToken.deleteOne({ _id: existing._id });
-    clearRefreshCookie(response);
-    return null;
-  }
-
-  await RefreshToken.deleteOne({ _id: existing._id });
-
-  const newRaw = crypto.randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + env.REFRESH_TOKEN_MAX_AGE_MS);
-
-  await RefreshToken.create({
-    userId: existing.userId,
-    tokenHash: hashToken(newRaw),
-    expiresAt,
-  });
-
-  setRefreshCookie(response, newRaw, env.REFRESH_TOKEN_MAX_AGE_MS);
   return String(existing.userId);
 }
 

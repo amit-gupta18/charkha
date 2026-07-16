@@ -1,74 +1,59 @@
 import { create } from "zustand";
-import { apiFetch, ApiError, refreshSession } from "@/lib/api";
+import { clearRefreshToken, getRefreshToken, setRefreshToken } from "@/lib/auth-session";
+import { refreshAccessToken } from "@/lib/api";
 import { queryClient } from "@/lib/query/client";
-import type { AuthResponse, User } from "@/lib/types";
+import type { User } from "@/lib/types";
 
 type AuthState = {
   user: User | null;
+  accessToken: string | null;
   isLoading: boolean;
-  setUser: (user: User | null) => void;
-  setLoading: (isLoading: boolean) => void;
-  clearUser: () => void;
-  loadSession: (options?: { clearOnFailure?: boolean }) => Promise<boolean>;
-  /** After login/register — verify cookies, set user, prep query cache. */
-  completeLogin: () => Promise<User>;
-  /** Clear user + query cache when session is permanently lost. */
+  setSession: (session: { user: User; accessToken: string; refreshToken: string }) => void;
+  updateAccess: (user: User, accessToken: string) => void;
+  clearSession: () => void;
+  bootstrapSession: () => Promise<boolean>;
   handleSessionLost: () => void;
 };
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   user: null,
+  accessToken: null,
   isLoading: true,
 
-  setUser: (user) => set({ user }),
+  setSession: ({ user, accessToken, refreshToken }) => {
+    setRefreshToken(refreshToken);
+    set({ user, accessToken });
+  },
 
-  setLoading: (isLoading) => set({ isLoading }),
+  updateAccess: (user, accessToken) => set({ user, accessToken }),
 
-  clearUser: () => set({ user: null }),
-
-  handleSessionLost: () => {
-    set({ user: null });
+  clearSession: () => {
+    clearRefreshToken();
+    set({ user: null, accessToken: null });
     queryClient.clear();
   },
 
-  loadSession: async (options) => {
-    const clearOnFailure = options?.clearOnFailure ?? false;
-
-    try {
-      const data = await apiFetch<AuthResponse>("/api/auth/me");
-      set({ user: data.user });
-      return true;
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
-        const refreshed = await refreshSession();
-        if (refreshed) {
-          try {
-            const data = await apiFetch<AuthResponse>("/api/auth/me");
-            set({ user: data.user });
-            return true;
-          } catch {
-            if (clearOnFailure) set({ user: null });
-            return false;
-          }
-        }
-        if (clearOnFailure) set({ user: null });
-        return false;
-      }
-      throw error;
-    }
+  handleSessionLost: () => {
+    clearRefreshToken();
+    set({ user: null, accessToken: null });
+    queryClient.clear();
   },
 
-  completeLogin: async () => {
-    const ok = await get().loadSession({ clearOnFailure: true });
+  bootstrapSession: async () => {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) {
+      set({ user: null, accessToken: null });
+      return false;
+    }
+
+    const ok = await refreshAccessToken();
     if (!ok) {
-      throw new ApiError("Session could not be established after login.", 401);
+      clearRefreshToken();
+      set({ user: null, accessToken: null });
+      return false;
     }
-    const user = get().user;
-    if (!user) {
-      throw new ApiError("Session could not be established.", 401);
-    }
-    await queryClient.invalidateQueries();
-    return user;
+
+    return true;
   },
 }));
 
@@ -76,6 +61,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 export function useAuth() {
   const user = useAuthStore((s) => s.user);
   const isLoading = useAuthStore((s) => s.isLoading);
-  const setUser = useAuthStore((s) => s.setUser);
-  return { user, isLoading, setUser };
+  const accessToken = useAuthStore((s) => s.accessToken);
+  return { user, isLoading, accessToken };
 }

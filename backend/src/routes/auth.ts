@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { User } from "../models/User";
 import { Settings } from "../models/Settings";
-import { clearSession, establishSession, resolveSession } from "../utils/authSession";
+import { issueAuthTokens } from "../utils/authSession";
+import { signAuthToken } from "../utils/jwt";
 import { comparePassword, hashPassword } from "../utils/passwords";
+import { revokeRefreshToken, validateRefreshToken } from "../utils/refreshToken";
 
 const router = Router();
 
@@ -52,8 +54,8 @@ router.post("/register", async (request, response, next) => {
 
     await Settings.create({ userId: user._id });
 
-    await establishSession(response, String(user._id), user.email);
-    response.status(201).json({ user: serializeUser(user) });
+    const { accessToken, refreshToken } = await issueAuthTokens(String(user._id), user.email);
+    response.status(201).json({ user: serializeUser(user), accessToken, refreshToken });
   } catch (error) {
     next(error);
   }
@@ -83,54 +85,44 @@ router.post("/login", async (request, response, next) => {
       return;
     }
 
-    await establishSession(response, String(user._id), user.email);
-    response.json({ user: serializeUser(user) });
+    const { accessToken, refreshToken } = await issueAuthTokens(String(user._id), user.email);
+    response.json({ user: serializeUser(user), accessToken, refreshToken });
   } catch (error) {
     next(error);
   }
 });
 
 router.post("/logout", async (request, response) => {
-  await clearSession(request, response);
+  const refreshToken = readString(request.body?.refreshToken);
+  await revokeRefreshToken(refreshToken);
   response.json({ success: true });
 });
 
 router.post("/refresh", async (request, response) => {
-  const session = await resolveSession(request, response);
+  const refreshToken = readString(request.body?.refreshToken);
 
-  if (!session) {
+  if (!refreshToken) {
     response.status(401).json({ message: "Unauthorized" });
     return;
   }
 
-  const user = await User.findById(session.userId);
+  const userId = await validateRefreshToken(refreshToken);
+
+  if (!userId) {
+    response.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+
+  const user = await User.findById(userId);
 
   if (!user) {
-    await clearSession(request, response);
+    await revokeRefreshToken(refreshToken);
     response.status(401).json({ message: "Unauthorized" });
     return;
   }
 
-  response.json({ user: serializeUser(user) });
-});
-
-router.get("/me", async (request, response) => {
-  const session = await resolveSession(request, response);
-
-  if (!session) {
-    response.status(401).json({ message: "Unauthorized" });
-    return;
-  }
-
-  const user = await User.findById(session.userId);
-
-  if (!user) {
-    await clearSession(request, response);
-    response.status(401).json({ message: "Unauthorized" });
-    return;
-  }
-
-  response.json({ user: serializeUser(user) });
+  const accessToken = signAuthToken({ userId: String(user._id), email: user.email });
+  response.json({ user: serializeUser(user), accessToken });
 });
 
 export default router;

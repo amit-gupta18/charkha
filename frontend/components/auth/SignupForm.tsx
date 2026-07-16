@@ -10,7 +10,7 @@ import { Alert, FieldLabel } from "@/components/ui/PageShell";
 
 export function SignupForm() {
   const router = useRouter();
-  const completeLogin = useAuthStore((s) => s.completeLogin);
+  const setSession = useAuthStore((s) => s.setSession);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,12 +23,16 @@ export function SignupForm() {
     setIsSubmitting(true);
 
     try {
-      await apiFetch<AuthResponse>("/api/auth/register", {
+      const data = await apiFetch<AuthResponse>("/api/auth/register", {
         method: "POST",
         body: JSON.stringify({ name, email, password }),
       });
 
-      await completeLogin();
+      setSession({
+        user: data.user,
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+      });
       broadcastAuthEvent("login");
       router.replace("/dashboard");
       router.refresh();

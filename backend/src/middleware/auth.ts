@@ -1,18 +1,24 @@
 import { NextFunction, Request, Response } from "express";
-import { resolveSession } from "../utils/authSession";
+import { verifyAuthToken } from "../utils/jwt";
+
+function readBearerToken(request: Request) {
+  const header = request.headers.authorization;
+  if (!header?.startsWith("Bearer ")) return null;
+  return header.slice(7).trim();
+}
 
 export async function requireAuth(request: Request, response: Response, next: NextFunction) {
   try {
-    const session = await resolveSession(request, response);
-
-    if (!session) {
+    const token = readBearerToken(request);
+    if (!token) {
       response.status(401).json({ message: "Unauthorized" });
       return;
     }
 
+    const payload = verifyAuthToken(token);
     request.user = {
-      userId: session.userId,
-      email: session.email,
+      userId: payload.userId,
+      email: payload.email,
     };
 
     next();

@@ -2,25 +2,30 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { getRefreshToken } from "@/lib/auth-session";
 import { useAuthStore } from "@/stores/auth";
 import { apiFetch } from "@/lib/api";
 import { broadcastAuthEvent } from "@/lib/sessionSync";
 
 export function LogoutButton() {
   const router = useRouter();
-  const handleSessionLost = useAuthStore((s) => s.handleSessionLost);
+  const clearSession = useAuthStore((s) => s.clearSession);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleLogout() {
     setIsSubmitting(true);
 
     try {
-      await apiFetch("/api/auth/logout", { method: "POST" });
+      const refreshToken = getRefreshToken();
+      await apiFetch("/api/auth/logout", {
+        method: "POST",
+        body: JSON.stringify({ refreshToken }),
+      });
+    } finally {
       broadcastAuthEvent("logout");
-      handleSessionLost();
+      clearSession();
       router.replace("/login");
       router.refresh();
-    } finally {
       setIsSubmitting(false);
     }
   }
