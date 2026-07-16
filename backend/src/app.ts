@@ -1,6 +1,8 @@
 import cookieParser from "cookie-parser";
+import cors from "cors";
 import express from "express";
 import mongoose from "mongoose";
+import { corsOptions } from "./config/cors";
 import { requireAuth } from "./middleware/auth";
 import authRoutes from "./routes/auth";
 import settingsRoutes from "./routes/settings";
@@ -19,6 +21,7 @@ export function createApp() {
   const app = express();
 
   app.set("trust proxy", 1);
+  app.use(cors(corsOptions()));
   app.use(express.json());
   app.use(cookieParser());
 
